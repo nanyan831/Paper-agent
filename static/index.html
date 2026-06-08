@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学术记忆库 | Academic Memory</title>
+    <!-- 引入 Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <i class="fa-solid fa-brain"></i>
+                <h1>学术记忆库</h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-view="search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <span>探索文献</span>
+                </a>
+                <a href="#" class="nav-item" data-view="library">
+                    <i class="fa-solid fa-book-bookmark"></i>
+                    <span>我的收藏</span>
+                </a>
+                <a href="#" class="nav-item" data-view="chat">
+                    <i class="fa-solid fa-comments"></i>
+                    <span>AI 对话</span>
+                </a>
+                <a href="#" class="nav-item" data-view="crawlers">
+                    <i class="fa-solid fa-spider"></i>
+                    <span>爬虫控制</span>
+                </a>
+                <a href="#" class="nav-item" data-view="stats">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>数据概览</span>
+                </a>
+            </nav>
+
+            <div class="system-status">
+                <div class="status-indicator active"></div>
+                <span>Agent 系统在线</span>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 视图：搜索 -->
+            <section id="view-search" class="view-section active">
+                <div class="search-header">
+                    <h2>自然语言语义检索</h2>
+                    <p>支持概念查询、模糊搜索、研究主题探索（如："关于社交媒体对青少年心理影响的社会学研究"）</p>
+                </div>
+                
+                <div class="search-bar-container">
+                    <div class="search-input-wrapper">
+                        <i class="fa-solid fa-sparkles"></i>
+                        <input type="text" id="searchInput" placeholder="描述你正在寻找的文献或研究问题...">
+                        <button id="searchBtn">探索</button>
+                    </div>
+                    <div class="search-options">
+                        <label>
+                            <input type="radio" name="searchType" value="hybrid" checked>
+                            混合检索 (推荐)
+                        </label>
+                        <label>
+                            <input type="radio" name="searchType" value="semantic">
+                            纯语义理解
+                        </label>
+                        <label>
+                            <input type="radio" name="searchType" value="keyword">
+                            精确关键词
+                        </label>
+                    </div>
+                </div>
+
+                <div class="loading-spinner hidden" id="searchLoading">
+                    <div class="spinner"></div>
+                    <span>AI 正在浩瀚记忆中检索...</span>
+                </div>
+
+                <div class="results-container" id="searchResults">
+                    <!-- 结果将由 JS 动态渲染 -->
+                    <div class="empty-state">
+                        <i class="fa-solid fa-book-open"></i>
+                        <p>输入你的研究主题开始探索</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 视图：AI 对话 -->
+            <section id="view-chat" class="view-section hidden" style="display: flex; flex-direction: column; height: 100%;">
+                <div class="chat-header">
+                    <h2>与 DeepSeek Agent 对话</h2>
+                    <p>它可以直接帮您查阅本地记忆库或抓取外部文献</p>
+                </div>
+                
+                <div class="chat-history-container" id="chatHistory">
+                    <!-- 初始欢迎语 -->
+                    <div class="chat-bubble assistant-bubble">
+                        <div class="bubble-content">
+                            <p>您好！我是您的智能学术助手。您可以让我：</p>
+                            <ul>
+                                <li>帮您在本地记忆库查找相关论文</li>
+                                <li>去 arXiv、Semantic Scholar、知网等外部库抓取最新文献</li>
+                                <li>帮您统计本地记忆库的数据概览</li>
+                            </ul>
+                            <p>请问今天我能为您做些什么？</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="chat-input-wrapper">
+                        <textarea id="chatInput" rows="1" placeholder="发送指令或询问问题..."></textarea>
+                        <button id="chatSendBtn" title="发送 (Enter)">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 视图：爬虫控制 -->
+            <section id="view-crawlers" class="view-section hidden">
+                <h2>调度爬虫 Agent</h2>
+                <div class="crawler-controls">
+                    <div class="control-card">
+                        <h3>主动寻猎文献</h3>
+                        <div class="form-group">
+                            <label>数据源</label>
+                            <select id="crawlSource">
+                                <option value="arxiv">arXiv (预印本)</option>
+                                <option value="semantic_scholar">Semantic Scholar (综合)</option>
+                                <option value="crossref">CrossRef (期刊)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>探索主题 / 关键词</label>
+                            <input type="text" id="crawlTopic" placeholder="例如: digital humanities">
+                        </div>
+                        <button id="triggerCrawlBtn" class="primary-btn">
+                            <i class="fa-solid fa-rocket"></i> 派出 Agent
+                        </button>
+                    </div>
+                </div>
+                <div class="crawl-logs" id="crawlLogs">
+                    <!-- 日志动态渲染 -->
+                </div>
+            </section>
+            
+            <!-- 视图：数据概览 -->
+            <section id="view-stats" class="view-section hidden">
+                <h2>记忆库总览</h2>
+                <div class="stats-grid" id="statsGrid">
+                    <!-- 统计数据动态渲染 -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- 论文详情弹窗 -->
+    <div class="modal" id="paperModal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <div class="modal-body" id="modalBody">
+                <!-- 内容动态注入 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
