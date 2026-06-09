@@ -134,7 +134,7 @@ class DatabaseManager:
             cursor = await db.execute(
                 f"""SELECT id, title, authors, abstract, keywords, url, doi, source,
                            publish_date, journal, language, citation_count,
-                           is_favorited, created_at
+                           is_favorited, file_path, parse_status, created_at
                     FROM papers WHERE {where}
                     ORDER BY {sort_col} {order}
                     LIMIT ? OFFSET ?""",
@@ -276,6 +276,7 @@ class DatabaseManager:
                 """SELECT p.id, p.title, p.authors, p.abstract, p.keywords,
                           p.url, p.doi, p.source, p.publish_date, p.journal,
                           p.language, p.citation_count, p.is_favorited,
+                          p.file_path, p.parse_status,
                           rank AS fts_score
                    FROM papers_fts fts
                    JOIN papers p ON p.rowid = fts.rowid

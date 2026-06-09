@@ -132,6 +132,48 @@
             </section>
 
             <!-- 视图：爬虫控制 -->
+
+            <section id="view-reader" class="view-section hidden">
+                <div class="reader-layout">
+                    <div class="reader-main">
+                        <div class="reader-toolbar">
+                            <button id="readerBackBtn" class="reader-btn" title="Back">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </button>
+                            <div class="reader-title-block">
+                                <h2 id="readerTitle">PDF Reader</h2>
+                                <span id="readerStatus">No paper loaded</span>
+                            </div>
+                            <div class="reader-controls">
+                                <button id="readerPrevBtn" class="reader-btn" title="Previous page">
+                                    <i class="fa-solid fa-chevron-left"></i>
+                                </button>
+                                <input id="readerPageInput" type="number" min="1" value="1">
+                                <span id="readerPageCount">/ 0</span>
+                                <button id="readerNextBtn" class="reader-btn" title="Next page">
+                                    <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                                <button id="readerZoomOutBtn" class="reader-btn" title="Zoom out">
+                                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                                </button>
+                                <button id="readerZoomInBtn" class="reader-btn" title="Zoom in">
+                                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="pdf-canvas-wrap">
+                            <canvas id="pdfCanvas"></canvas>
+                        </div>
+                    </div>
+                    <aside class="reader-sidebar">
+                        <h3>Full-text chunks</h3>
+                        <div id="readerChunks" class="reader-chunks">
+                            <p class="reader-empty">Open a PDF to inspect its chunks.</p>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+
             <section id="view-crawlers" class="view-section hidden">
                 <h2>调度爬虫 Agent</h2>
                 <div class="crawler-controls">
@@ -206,6 +248,7 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

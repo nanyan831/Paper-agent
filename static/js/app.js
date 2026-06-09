@@ -2,26 +2,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // === 导航与视图切换 ===
     const navItems = document.querySelectorAll('.nav-item');
     const viewSections = document.querySelectorAll('.view-section');
+    const escapeHtmlGlobal = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    function showView(targetView, activateNav = true) {
+        if (activateNav) {
+            navItems.forEach(nav => {
+                nav.classList.toggle('active', nav.getAttribute('data-view') === targetView);
+            });
+        }
+
+        viewSections.forEach(section => {
+            section.classList.toggle('hidden', section.id !== `view-${targetView}`);
+        });
+
+        if (targetView === 'stats') loadStats();
+        if (targetView === 'library') loadLibrary();
+    }
 
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            const targetView = item.getAttribute('data-view');
-            
-            // 切换导航 active 状态
-            navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-            
-            // 切换视图
-            viewSections.forEach(section => {
-                section.classList.add('hidden');
-                if(section.id === `view-${targetView}`) {
-                    section.classList.remove('hidden');
-                    // 触发对应视图的数据加载
-                    if(targetView === 'stats') loadStats();
-                    if(targetView === 'library') loadLibrary();
-                }
-            });
+            showView(item.getAttribute('data-view'));
         });
     });
 
@@ -64,41 +70,187 @@ document.addEventListener('DOMContentLoaded', () => {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-ghost"></i>
-                    <p>未在记忆库中找到相关文献</p>
+                    <p>No matching papers found in memory.</p>
                 </div>`;
             return;
         }
 
-        container.innerHTML = papers.map(paper => `
-            <div class="paper-card" data-id="${paper.id}">
-                <h3 class="paper-title" onclick="openPaperDetail('${paper.id}')">${paper.title}</h3>
+        container.innerHTML = papers.map(paper => {
+            const hasPdf = Boolean(paper.file_path || paper.source === 'local_pdf' || paper.parse_status === 'full_text');
+            return `
+            <div class="paper-card" data-id="${escapeHtmlGlobal(paper.id)}">
+                <h3 class="paper-title" onclick="openPaperDetail('${escapeHtmlGlobal(paper.id)}')">${escapeHtmlGlobal(paper.title)}</h3>
                 <div class="paper-meta">
-                    ${paper.authors ? `<span><i class="fa-solid fa-users"></i> ${paper.authors}</span>` : ''}
-                    <span><i class="fa-regular fa-calendar"></i> ${paper.publish_date || 'Unknown'}</span>
-                    ${paper.journal ? `<span><i class="fa-solid fa-book"></i> ${paper.journal}</span>` : ''}
+                    ${paper.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(paper.authors)}</span>` : ''}
+                    <span><i class="fa-regular fa-calendar"></i> ${escapeHtmlGlobal(paper.publish_date || 'Unknown')}</span>
+                    ${paper.journal ? `<span><i class="fa-solid fa-book"></i> ${escapeHtmlGlobal(paper.journal)}</span>` : ''}
                     <span style="color: var(--accent-primary)">
-                        <i class="fa-solid fa-bolt"></i> ${paper.search_type || 'db'}
+                        <i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(paper.search_type || 'db')}
                     </span>
                 </div>
-                <div class="paper-abstract">${paper.abstract || '暂无摘要'}</div>
+                <div class="paper-abstract">${escapeHtmlGlobal(paper.abstract || 'No abstract available.')}</div>
                 <div class="paper-actions">
                     <div class="tag-list">
-                        <span class="tag">${paper.source}</span>
-                        ${paper.language ? `<span class="tag">${paper.language}</span>` : ''}
+                        <span class="tag">${escapeHtmlGlobal(paper.source || 'local')}</span>
+                        ${paper.language ? `<span class="tag">${escapeHtmlGlobal(paper.language)}</span>` : ''}
                     </div>
                     <div>
-                        <button class="icon-btn ${paper.is_favorited ? 'active' : ''}" onclick="toggleFavorite('${paper.id}', this)" title="收藏">
+                        ${hasPdf ? `
+                        <button class="icon-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="?? PDF">
+                            <i class="fa-solid fa-book-open-reader"></i>
+                        </button>` : ''}
+                        <button class="icon-btn ${paper.is_favorited ? 'active' : ''}" onclick="toggleFavorite('${escapeHtmlGlobal(paper.id)}', this)" title="??">
                             <i class="fa-solid fa-star"></i>
                         </button>
                         ${paper.url ? `
-                        <a href="${paper.url}" target="_blank" class="icon-btn" title="查看原文" onclick="event.stopPropagation()">
+                        <a href="${escapeHtmlGlobal(paper.url)}" target="_blank" class="icon-btn" title="Open source" onclick="event.stopPropagation()">
                             <i class="fa-solid fa-external-link-alt"></i>
                         </a>` : ''}
                     </div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
+
+    // === PDF Reader ===
+    const readerState = {
+        paperId: null,
+        paper: null,
+        pdfDoc: null,
+        pageNum: 1,
+        scale: 1.2,
+        rendering: false,
+        pendingPage: null,
+        returnView: 'search'
+    };
+
+    const readerTitle = document.getElementById('readerTitle');
+    const readerStatus = document.getElementById('readerStatus');
+    const readerPageInput = document.getElementById('readerPageInput');
+    const readerPageCount = document.getElementById('readerPageCount');
+    const readerChunks = document.getElementById('readerChunks');
+    const pdfCanvas = document.getElementById('pdfCanvas');
+
+    if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    function updateReaderControls() {
+        const total = readerState.pdfDoc ? readerState.pdfDoc.numPages : 0;
+        readerPageInput.value = readerState.pageNum;
+        readerPageInput.max = total || 1;
+        readerPageCount.textContent = `/ ${total}`;
+        document.getElementById('readerPrevBtn').disabled = !total || readerState.pageNum <= 1;
+        document.getElementById('readerNextBtn').disabled = !total || readerState.pageNum >= total;
+        readerStatus.textContent = total ? `Page ${readerState.pageNum} of ${total}` : 'No paper loaded';
+    }
+
+    async function renderPdfPage(pageNum) {
+        if (!readerState.pdfDoc || readerState.rendering) {
+            readerState.pendingPage = pageNum;
+            return;
+        }
+        readerState.rendering = true;
+        const page = await readerState.pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: readerState.scale });
+        const context = pdfCanvas.getContext('2d');
+        pdfCanvas.width = viewport.width;
+        pdfCanvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport }).promise;
+        readerState.rendering = false;
+        updateReaderControls();
+        if (readerState.pendingPage && readerState.pendingPage !== pageNum) {
+            const pending = readerState.pendingPage;
+            readerState.pendingPage = null;
+            await queuePdfPage(pending);
+        } else {
+            readerState.pendingPage = null;
+        }
+    }
+
+    async function queuePdfPage(pageNum) {
+        if (!readerState.pdfDoc) return;
+        const total = readerState.pdfDoc.numPages;
+        readerState.pageNum = Math.min(Math.max(Number(pageNum) || 1, 1), total);
+        updateReaderControls();
+        await renderPdfPage(readerState.pageNum);
+    }
+
+    async function loadReaderChunks(paperId) {
+        readerChunks.innerHTML = '<p class="reader-empty">Loading chunks...</p>';
+        try {
+            const res = await fetch(`/api/papers/${paperId}/chunks?limit=200`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Failed to load chunks');
+            const chunks = data.chunks || [];
+            if (!chunks.length) {
+                readerChunks.innerHTML = '<p class="reader-empty">No chunks available for this paper.</p>';
+                return;
+            }
+            readerChunks.innerHTML = chunks.map(chunk => `
+                <button class="reader-chunk" data-page="${chunk.page_start || 1}">
+                    <span>Chunk ${chunk.chunk_index + 1}${chunk.page_start ? ` ? p.${chunk.page_start}${chunk.page_end && chunk.page_end !== chunk.page_start ? `-${chunk.page_end}` : ''}` : ''}</span>
+                    <p>${escapeHtmlGlobal((chunk.content || '').slice(0, 220))}</p>
+                </button>
+            `).join('');
+            readerChunks.querySelectorAll('.reader-chunk').forEach(btn => {
+                btn.addEventListener('click', () => queuePdfPage(Number(btn.dataset.page || 1)));
+            });
+        } catch (error) {
+            readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
+        }
+    }
+
+    window.openPdfReader = async (paperId) => {
+        if (window.event) window.event.stopPropagation();
+        if (!window.pdfjsLib) {
+            alert('PDF.js failed to load. Check your network connection.');
+            return;
+        }
+        readerState.returnView = document.querySelector('.view-section:not(.hidden)')?.id?.replace('view-', '') || 'search';
+        showView('reader', false);
+        readerTitle.textContent = 'Loading PDF...';
+        readerStatus.textContent = 'Preparing reader';
+        readerChunks.innerHTML = '<p class="reader-empty">Loading chunks...</p>';
+        const context = pdfCanvas.getContext('2d');
+        context.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+
+        try {
+            const paperRes = await fetch(`/api/papers/${paperId}`);
+            const paper = await paperRes.json();
+            if (!paperRes.ok) throw new Error(paper.detail || 'Paper not found');
+            readerState.paperId = paperId;
+            readerState.paper = paper;
+            readerState.pageNum = 1;
+            readerState.scale = 1.2;
+            readerTitle.textContent = paper.title || 'PDF Reader';
+
+            const pdfUrl = `/api/papers/${paperId}/pdf`;
+            readerState.pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
+            updateReaderControls();
+            await renderPdfPage(1);
+            await loadReaderChunks(paperId);
+        } catch (error) {
+            readerTitle.textContent = 'PDF Reader';
+            readerStatus.textContent = 'Failed to load PDF';
+            readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
+        }
+    };
+
+    document.getElementById('readerBackBtn').addEventListener('click', () => {
+        showView(readerState.returnView || 'search');
+    });
+    document.getElementById('readerPrevBtn').addEventListener('click', () => queuePdfPage(readerState.pageNum - 1));
+    document.getElementById('readerNextBtn').addEventListener('click', () => queuePdfPage(readerState.pageNum + 1));
+    document.getElementById('readerZoomOutBtn').addEventListener('click', () => {
+        readerState.scale = Math.max(0.6, readerState.scale - 0.2);
+        queuePdfPage(readerState.pageNum);
+    });
+    document.getElementById('readerZoomInBtn').addEventListener('click', () => {
+        readerState.scale = Math.min(2.4, readerState.scale + 0.2);
+        queuePdfPage(readerState.pageNum);
+    });
+    readerPageInput.addEventListener('change', () => queuePdfPage(Number(readerPageInput.value)));
 
     // === 弹窗详情 ===
     const modal = document.getElementById('paperModal');
@@ -138,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>` : ''}
 
                 <div style="margin-top: 30px;">
+                    ${paper.file_path ? `<button class="primary-btn" onclick="modal.style.display='none'; openPdfReader('${paper.id}')"><i class="fa-solid fa-book-open-reader"></i> 阅读 PDF</button>` : ''}
                     ${paper.url ? `<a href="${paper.url}" target="_blank" class="primary-btn"><i class="fa-solid fa-file-pdf"></i> 获取原文</a>` : ''}
                 </div>
             `;
