@@ -96,12 +96,16 @@
             </section>
 
             <!-- 视图：AI 对话 -->
-            <section id="view-chat" class="view-section hidden" style="display: flex; flex-direction: column; height: 100%;">
+            <section id="view-chat" class="chat-widget-panel hidden">
                 <div class="chat-header">
                     <h2>与 DeepSeek Agent 对话</h2>
                     <p>它可以直接帮您查阅本地记忆库或抓取外部文献</p>
                 </div>
                 
+                <button id="chatCloseBtn" class="chat-close-btn" title="Close AI chat" aria-label="Close AI chat">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+
                 <div class="chat-history-container" id="chatHistory">
                     <!-- 初始欢迎语 -->
                     <div class="chat-bubble assistant-bubble">
@@ -149,6 +153,28 @@
                             <i class="fa-solid fa-rocket"></i> 派出 Agent
                         </button>
                     </div>
+                    <div class="control-card">
+                        <h3>导入本地 PDF</h3>
+                        <div class="form-group">
+                            <label>PDF 文件</label>
+                            <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+                        </div>
+                        <div class="form-group">
+                            <label>标题（可选）</label>
+                            <input type="text" id="pdfTitle" placeholder="默认使用文件名">
+                        </div>
+                        <div class="form-group">
+                            <label>作者（可选）</label>
+                            <input type="text" id="pdfAuthors" placeholder="作者列表">
+                        </div>
+                        <div class="form-group">
+                            <label>关键词（可选）</label>
+                            <input type="text" id="pdfKeywords" placeholder="多个关键词用逗号分隔">
+                        </div>
+                        <button id="uploadPdfBtn" class="primary-btn">
+                            <i class="fa-solid fa-file-arrow-up"></i> 导入 PDF
+                        </button>
+                    </div>
                 </div>
                 <div class="crawl-logs" id="crawlLogs">
                     <!-- 日志动态渲染 -->
@@ -167,6 +193,10 @@
     </div>
 
     <!-- 论文详情弹窗 -->
+    <button id="chatToggleBtn" class="chat-toggle-btn" title="AI chat" aria-label="Open AI chat">
+        <i class="fa-solid fa-comments"></i>
+    </button>
+
     <div class="modal" id="paperModal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>

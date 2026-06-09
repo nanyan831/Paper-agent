@@ -19,11 +19,29 @@ CREATE TABLE IF NOT EXISTS papers (
     publish_date TEXT,
     journal TEXT,
     full_text TEXT,
+    file_path TEXT,
+    parse_status TEXT DEFAULT 'metadata_only',
     language TEXT DEFAULT 'zh',
     citation_count INTEGER DEFAULT 0,
     is_favorited INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+CREATE_PAPER_CHUNKS_TABLE = """
+CREATE TABLE IF NOT EXISTS paper_chunks (
+    id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    section TEXT,
+    page_start INTEGER,
+    page_end INTEGER,
+    content TEXT NOT NULL,
+    token_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (paper_id) REFERENCES papers(id) ON DELETE CASCADE,
+    UNIQUE(paper_id, chunk_index)
 );
 """
 
@@ -117,10 +135,20 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_papers_publish_date ON papers(publish_date);",
     "CREATE INDEX IF NOT EXISTS idx_papers_language ON papers(language);",
     "CREATE INDEX IF NOT EXISTS idx_papers_favorited ON papers(is_favorited);",
+    "CREATE INDEX IF NOT EXISTS idx_chunks_paper ON paper_chunks(paper_id);",
     "CREATE INDEX IF NOT EXISTS idx_paper_tags_paper ON paper_tags(paper_id);",
     "CREATE INDEX IF NOT EXISTS idx_paper_tags_tag ON paper_tags(tag);",
     "CREATE INDEX IF NOT EXISTS idx_crawl_logs_source ON crawl_logs(source);",
 ]
+
+
+async def _ensure_paper_columns(db):
+    cursor = await db.execute("PRAGMA table_info(papers)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    if "file_path" not in columns:
+        await db.execute("ALTER TABLE papers ADD COLUMN file_path TEXT")
+    if "parse_status" not in columns:
+        await db.execute("ALTER TABLE papers ADD COLUMN parse_status TEXT DEFAULT 'metadata_only'")
 
 
 async def init_database():
@@ -132,6 +160,8 @@ async def init_database():
 
         # 建表
         await db.execute(CREATE_PAPERS_TABLE)
+        await _ensure_paper_columns(db)
+        await db.execute(CREATE_PAPER_CHUNKS_TABLE)
         await db.execute(CREATE_PAPER_TAGS_TABLE)
         await db.execute(CREATE_CRAWL_LOGS_TABLE)
         await db.execute(CREATE_RSS_SOURCES_TABLE)

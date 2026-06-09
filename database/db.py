@@ -33,8 +33,9 @@ class DatabaseManager:
                 await db.execute(
                     """INSERT INTO papers 
                        (id, title, authors, abstract, keywords, url, doi, source,
-                        publish_date, journal, full_text, language, citation_count)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        publish_date, journal, full_text, file_path, parse_status,
+                        language, citation_count)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         paper_id,
                         paper.get("title", ""),
@@ -47,6 +48,8 @@ class DatabaseManager:
                         paper.get("publish_date"),
                         paper.get("journal", ""),
                         paper.get("full_text", ""),
+                        paper.get("file_path", ""),
+                        paper.get("parse_status", "metadata_only"),
                         paper.get("language", "zh"),
                         paper.get("citation_count", 0),
                     ),
@@ -158,6 +161,44 @@ class DatabaseManager:
             )
             await db.commit()
             return cursor.rowcount > 0
+
+    async def replace_paper_chunks(self, paper_id: str, chunks: list[dict]) -> int:
+        """Replace all stored chunks for a paper."""
+        async with self._get_conn() as db:
+            await db.execute("DELETE FROM paper_chunks WHERE paper_id = ?", (paper_id,))
+            for chunk in chunks:
+                await db.execute(
+                    """INSERT INTO paper_chunks
+                       (id, paper_id, chunk_index, section, page_start, page_end, content, token_count)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        chunk["id"],
+                        paper_id,
+                        chunk["chunk_index"],
+                        chunk.get("section"),
+                        chunk.get("page_start"),
+                        chunk.get("page_end"),
+                        chunk["content"],
+                        chunk.get("token_count", 0),
+                    ),
+                )
+            await db.commit()
+            return len(chunks)
+
+    async def get_paper_chunks(self, paper_id: str, limit: int = 200) -> list[dict]:
+        """Return chunks for a paper in reading order."""
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT id, paper_id, chunk_index, section, page_start, page_end,
+                          content, token_count, created_at
+                   FROM paper_chunks
+                   WHERE paper_id = ?
+                   ORDER BY chunk_index
+                   LIMIT ?""",
+                (paper_id, limit),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
     async def delete_paper(self, paper_id: str) -> bool:
         """删除论文"""

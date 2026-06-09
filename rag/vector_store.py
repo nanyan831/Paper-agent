@@ -17,11 +17,13 @@ class VectorStore:
     """ChromaDB 向量存储管理器"""
 
     COLLECTION_NAME = "papers"
+    CHUNK_COLLECTION_NAME = "paper_chunks"
 
     def __init__(self, embedder: Optional[EmbeddingService] = None):
         self.embedder = embedder or EmbeddingService()
         self._client = None
         self._collection = None
+        self._chunk_collection = None
 
     @property
     def client(self):
@@ -42,6 +44,16 @@ class VectorStore:
             )
             logger.info(f"向量集合 '{self.COLLECTION_NAME}' 已就绪, 当前文档数: {self._collection.count()}")
         return self._collection
+
+    @property
+    def chunk_collection(self):
+        if self._chunk_collection is None:
+            self._chunk_collection = self.client.get_or_create_collection(
+                name=self.CHUNK_COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
+            )
+            logger.info(f"Chunk 向量集合 '{self.CHUNK_COLLECTION_NAME}' 已就绪，当前块数: {self._chunk_collection.count()}")
+        return self._chunk_collection
 
     def add_paper(self, paper_id: str, paper: dict):
         """将论文嵌入并存入向量库"""
@@ -119,6 +131,45 @@ class VectorStore:
                 )
             logger.info(f"批量添加 {len(ids)} 篇论文到向量库")
 
+    def add_chunks_batch(self, chunks: list[dict]):
+        """Batch add full-text chunks to the chunk vector collection."""
+        if not chunks:
+            return
+
+        ids = []
+        texts = []
+        metadatas = []
+        for chunk in chunks:
+            chunk_id = chunk.get("id")
+            content = chunk.get("content", "")
+            if not chunk_id or not content:
+                continue
+            ids.append(chunk_id)
+            texts.append(content)
+            metadata = {
+                "paper_id": chunk.get("paper_id", ""),
+                "chunk_index": chunk.get("chunk_index", 0),
+                "section": chunk.get("section", "body"),
+                "page_start": chunk.get("page_start") or 0,
+                "page_end": chunk.get("page_end") or 0,
+            }
+            metadatas.append(metadata)
+
+        if not ids:
+            return
+
+        embeddings = self.embedder.embed_texts(texts)
+        batch_size = 100
+        for start in range(0, len(ids), batch_size):
+            end = start + batch_size
+            self.chunk_collection.upsert(
+                ids=ids[start:end],
+                embeddings=embeddings[start:end],
+                metadatas=metadatas[start:end],
+                documents=texts[start:end],
+            )
+        logger.info(f"批量添加 {len(ids)} 个全文块到向量库")
+
     def search(
         self,
         query: str,
@@ -169,6 +220,10 @@ class VectorStore:
             self.collection.delete(ids=[paper_id])
         except Exception as e:
             logger.warning(f"删除向量失败: {paper_id}, {e}")
+        try:
+            self.chunk_collection.delete(where={"paper_id": paper_id})
+        except Exception as e:
+            logger.warning(f"删除 chunk 向量失败: {paper_id}, {e}")
 
     def count(self) -> int:
         """返回向量库中的文档数量"""

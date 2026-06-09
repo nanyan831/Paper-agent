@@ -14,10 +14,12 @@ DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "papers.db"
 CHROMA_DIR = DATA_DIR / "chroma_db"
 LOG_DIR = DATA_DIR / "logs"
+PDF_DIR = DATA_DIR / "pdfs"
 
 # 确保数据目录存在
 DATA_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
+PDF_DIR.mkdir(exist_ok=True)
 
 # ==================== 嵌入模型配置 ====================
 # 本地模型（免费，中文优化）

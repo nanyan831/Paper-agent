@@ -202,6 +202,55 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // === 统计视图加载 ===
+    document.getElementById('uploadPdfBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('pdfFile');
+        const btn = document.getElementById('uploadPdfBtn');
+        const logsDiv = document.getElementById('crawlLogs');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            alert('请选择 PDF 文件');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', document.getElementById('pdfTitle').value.trim());
+        formData.append('authors', document.getElementById('pdfAuthors').value.trim());
+        formData.append('keywords', document.getElementById('pdfKeywords').value.trim());
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在解析...';
+
+        try {
+            const res = await fetch('/api/papers/upload-pdf', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.detail || '上传失败');
+            }
+
+            logsDiv.innerHTML = `
+                <div style="padding: 16px; background: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; border-radius: 4px; margin-top: 20px;">
+                    <p style="color: #10b981;"><i class="fa-solid fa-check-circle"></i> PDF 已导入：${data.title}</p>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">页数：${data.pages}，全文块：${data.chunks}，状态：${data.parse_status}</p>
+                </div>
+            ` + logsDiv.innerHTML;
+
+            fileInput.value = '';
+            document.getElementById('pdfTitle').value = '';
+            document.getElementById('pdfAuthors').value = '';
+            document.getElementById('pdfKeywords').value = '';
+        } catch (error) {
+            alert('PDF 导入失败: ' + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-file-arrow-up"></i> 导入 PDF';
+        }
+    });
+
     async function loadStats() {
         const grid = document.getElementById('statsGrid');
         grid.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
@@ -244,6 +293,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatInput = document.getElementById('chatInput');
     const chatSendBtn = document.getElementById('chatSendBtn');
     const chatHistory = document.getElementById('chatHistory');
+    const chatPanel = document.getElementById('view-chat');
+    const chatToggleBtn = document.getElementById('chatToggleBtn');
+    const chatCloseBtn = document.getElementById('chatCloseBtn');
+
+    function openChatPanel() {
+        chatPanel.classList.remove('hidden');
+        chatToggleBtn.classList.add('hidden');
+        scrollToBottom();
+        chatInput.focus();
+    }
+
+    function closeChatPanel() {
+        chatPanel.classList.add('hidden');
+        chatToggleBtn.classList.remove('hidden');
+    }
+
+    chatToggleBtn.addEventListener('click', openChatPanel);
+    chatCloseBtn.addEventListener('click', closeChatPanel);
 
     // 简单 Markdown 解析器 (加粗和换行)
     function parseSimpleMarkdown(text) {
