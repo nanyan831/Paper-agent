@@ -1,6 +1,7 @@
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from typing import Optional
 
 from config import PDF_DIR
@@ -87,6 +88,37 @@ async def upload_pdf_paper(
         "pages": len(pages),
         "chunks": len(chunks),
     }
+
+
+@router.get("/{paper_id}/pdf")
+async def get_paper_pdf(request: Request, paper_id: str):
+    db = request.app.state.db
+    paper = await db.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    file_path = paper.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="PDF file not found for this paper")
+
+    resolved_pdf_dir = PDF_DIR.resolve()
+    resolved_file = Path(file_path).resolve()
+    try:
+        resolved_file.relative_to(resolved_pdf_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="PDF path is outside the allowed directory")
+
+    if not resolved_file.exists() or not resolved_file.is_file():
+        raise HTTPException(status_code=404, detail="PDF file is missing on disk")
+
+    filename = f"{paper.get('title') or paper_id}.pdf"
+    return FileResponse(
+        path=str(resolved_file),
+        media_type="application/pdf",
+        filename=filename,
+        content_disposition_type="inline",
+    )
+
 
 @router.get("/{paper_id}")
 async def get_paper(request: Request, paper_id: str):
