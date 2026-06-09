@@ -22,6 +22,24 @@ async def search_papers(
     )
     return {"results": results}
 
+@router.get("/chunks")
+async def search_chunks(
+    request: Request,
+    q: str,
+    top_k: int = Query(8, le=30),
+    search_type: str = Query("hybrid", regex="^(hybrid|semantic|keyword)$"),
+    paper_id: Optional[str] = None
+):
+    retriever = request.app.state.retriever
+    filters = {"paper_id": paper_id} if paper_id else None
+    results = await retriever.search_chunks(
+        query=q,
+        top_k=top_k,
+        filters=filters,
+        search_type=search_type,
+    )
+    return {"results": results}
+
 @router.get("/related/{paper_id}")
 async def get_related(
     request: Request,

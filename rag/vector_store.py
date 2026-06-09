@@ -214,6 +214,37 @@ class VectorStore:
 
         return papers
 
+    def search_chunks(
+        self,
+        query: str,
+        top_k: int = 20,
+        filters: Optional[dict] = None,
+    ) -> list[dict]:
+        """Semantic search over full-text chunks."""
+        query_embedding = self.embedder.embed_text(query)
+        search_kwargs = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(top_k, self.chunk_collection.count() or 1),
+        }
+        if filters:
+            search_kwargs["where"] = filters
+
+        results = self.chunk_collection.query(**search_kwargs)
+
+        chunks = []
+        if results and results["ids"] and results["ids"][0]:
+            for i, chunk_id in enumerate(results["ids"][0]):
+                score = 1.0
+                if results.get("distances") and results["distances"][0]:
+                    score = 1 - results["distances"][0][i]
+                chunks.append({
+                    "id": chunk_id,
+                    "score": score,
+                    "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
+                    "content": results["documents"][0][i] if results.get("documents") else "",
+                })
+        return chunks
+
     def delete_paper(self, paper_id: str):
         """从向量库删除论文"""
         try:

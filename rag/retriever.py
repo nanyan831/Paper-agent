@@ -111,6 +111,56 @@ class HybridRetriever:
 
         return await self._enrich_semantic_results(results[:top_k])
 
+    async def search_chunks(
+        self,
+        query: str,
+        top_k: int = 8,
+        filters: Optional[dict] = None,
+        search_type: str = "hybrid",
+    ) -> list[dict]:
+        """Search full-text chunks for RAG context."""
+        if search_type in ("hybrid", "semantic"):
+            try:
+                semantic_results = self.vector_store.search_chunks(
+                    query=query,
+                    top_k=top_k * 3,
+                    filters=self._build_chunk_filters(filters),
+                )
+            except Exception as e:
+                logger.error(f"Chunk semantic search failed: {e}")
+                semantic_results = []
+        else:
+            semantic_results = []
+
+        if search_type in ("hybrid", "keyword"):
+            try:
+                keyword_results = await self.db.fts_search_chunks(
+                    self._build_fts_query(query),
+                    limit=top_k * 3,
+                )
+            except Exception as e:
+                logger.error(f"Chunk keyword search failed: {e}")
+                keyword_results = []
+        else:
+            keyword_results = []
+
+        if search_type == "hybrid" and semantic_results and keyword_results:
+            results = await self._rrf_fusion_chunks(semantic_results, keyword_results, top_k)
+        elif semantic_results:
+            results = await self._enrich_semantic_chunks(semantic_results[:top_k])
+        elif keyword_results:
+            results = keyword_results[:top_k]
+            for result in results:
+                result["search_score"] = abs(result.get("fts_score", 0))
+                result["search_type"] = "keyword_chunk"
+        else:
+            results = []
+
+        if filters:
+            results = self._apply_chunk_filters(results, filters)
+
+        return results[:top_k]
+
     def _build_fts_query(self, query: str) -> str:
         """构建 FTS5 查询语句"""
         # 移除 FTS 特殊字符
@@ -131,6 +181,16 @@ class HybridRetriever:
             where["source"] = filters["source"]
         if "language" in filters:
             where["language"] = filters["language"]
+        return where if where else None
+
+    def _build_chunk_filters(self, filters: Optional[dict]) -> Optional[dict]:
+        if not filters:
+            return None
+        where = {}
+        if "paper_id" in filters:
+            where["paper_id"] = filters["paper_id"]
+        if "section" in filters:
+            where["section"] = filters["section"]
         return where if where else None
 
     def _rrf_fusion(
@@ -191,6 +251,49 @@ class HybridRetriever:
                 enriched.append(r)
         return enriched
 
+    async def _enrich_semantic_chunks(self, results: list[dict]) -> list[dict]:
+        chunk_ids = [result["id"] for result in results]
+        chunks = await self.db.get_chunks_by_ids(chunk_ids)
+        score_by_id = {result["id"]: result.get("score", 0) for result in results}
+        content_by_id = {result["id"]: result.get("content", "") for result in results}
+        for chunk in chunks:
+            chunk["search_score"] = score_by_id.get(chunk["id"], 0)
+            chunk["search_type"] = "semantic_chunk"
+            chunk["content"] = chunk.get("content") or content_by_id.get(chunk["id"], "")
+        return chunks
+
+    async def _rrf_fusion_chunks(
+        self,
+        semantic_results: list[dict],
+        keyword_results: list[dict],
+        top_k: int,
+        k: int = 60,
+    ) -> list[dict]:
+        scores: dict[str, float] = {}
+        chunk_data: dict[str, dict] = {}
+
+        for rank, result in enumerate(semantic_results):
+            chunk_id = result["id"]
+            scores[chunk_id] = scores.get(chunk_id, 0) + self.semantic_weight / (k + rank + 1)
+            chunk_data.setdefault(chunk_id, result)
+
+        for rank, result in enumerate(keyword_results):
+            chunk_id = result["id"]
+            scores[chunk_id] = scores.get(chunk_id, 0) + self.keyword_weight / (k + rank + 1)
+            chunk_data.setdefault(chunk_id, result)
+
+        sorted_ids = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)[:top_k]
+        enriched = await self.db.get_chunks_by_ids(sorted_ids)
+        by_id = {chunk["id"]: chunk for chunk in enriched}
+
+        results = []
+        for chunk_id in sorted_ids:
+            data = by_id.get(chunk_id, chunk_data[chunk_id])
+            data["search_score"] = scores[chunk_id]
+            data["search_type"] = "hybrid_chunk"
+            results.append(data)
+        return results
+
     def _apply_filters(self, results: list[dict], filters: dict) -> list[dict]:
         """应用后过滤"""
         filtered = results
@@ -201,4 +304,12 @@ class HybridRetriever:
         if "min_citations" in filters:
             min_c = filters["min_citations"]
             filtered = [r for r in filtered if (r.get("citation_count") or 0) >= min_c]
+        return filtered
+
+    def _apply_chunk_filters(self, results: list[dict], filters: dict) -> list[dict]:
+        filtered = results
+        if "paper_id" in filters:
+            filtered = [r for r in filtered if r.get("paper_id") == filters["paper_id"]]
+        if "section" in filters:
+            filtered = [r for r in filtered if r.get("section") == filters["section"]]
         return filtered

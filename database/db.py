@@ -200,6 +200,45 @@ class DatabaseManager:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
+    async def get_chunks_by_ids(self, chunk_ids: list[str]) -> list[dict]:
+        """Return chunks by id, preserving the requested order."""
+        if not chunk_ids:
+            return []
+        placeholders = ",".join("?" for _ in chunk_ids)
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                f"""SELECT c.id, c.paper_id, c.chunk_index, c.section, c.page_start,
+                           c.page_end, c.content, c.token_count,
+                           p.title, p.authors, p.source, p.publish_date, p.journal,
+                           p.url, p.doi
+                    FROM paper_chunks c
+                    JOIN papers p ON p.id = c.paper_id
+                    WHERE c.id IN ({placeholders})""",
+                chunk_ids,
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+        by_id = {row["id"]: row for row in rows}
+        return [by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in by_id]
+
+    async def fts_search_chunks(self, query: str, limit: int = 20) -> list[dict]:
+        """FTS5 search over full-text chunks."""
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT c.id, c.paper_id, c.chunk_index, c.section, c.page_start,
+                          c.page_end, c.content, c.token_count,
+                          p.title, p.authors, p.source, p.publish_date, p.journal,
+                          p.url, p.doi, rank AS fts_score
+                   FROM paper_chunks_fts fts
+                   JOIN paper_chunks c ON c.rowid = fts.rowid
+                   JOIN papers p ON p.id = c.paper_id
+                   WHERE paper_chunks_fts MATCH ?
+                   ORDER BY rank
+                   LIMIT ?""",
+                (query, limit),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
     async def delete_paper(self, paper_id: str) -> bool:
         """删除论文"""
         async with self._get_conn() as db:

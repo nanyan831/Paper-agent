@@ -45,6 +45,39 @@ CREATE TABLE IF NOT EXISTS paper_chunks (
 );
 """
 
+CREATE_CHUNKS_FTS_TABLE = """
+CREATE VIRTUAL TABLE IF NOT EXISTS paper_chunks_fts USING fts5(
+    content,
+    section,
+    content='paper_chunks',
+    content_rowid='rowid',
+    tokenize='unicode61'
+);
+"""
+
+CREATE_CHUNKS_FTS_INSERT_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS paper_chunks_fts_insert AFTER INSERT ON paper_chunks BEGIN
+    INSERT INTO paper_chunks_fts(rowid, content, section)
+    VALUES (new.rowid, new.content, new.section);
+END;
+"""
+
+CREATE_CHUNKS_FTS_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS paper_chunks_fts_delete AFTER DELETE ON paper_chunks BEGIN
+    INSERT INTO paper_chunks_fts(paper_chunks_fts, rowid, content, section)
+    VALUES ('delete', old.rowid, old.content, old.section);
+END;
+"""
+
+CREATE_CHUNKS_FTS_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS paper_chunks_fts_update AFTER UPDATE ON paper_chunks BEGIN
+    INSERT INTO paper_chunks_fts(paper_chunks_fts, rowid, content, section)
+    VALUES ('delete', old.rowid, old.content, old.section);
+    INSERT INTO paper_chunks_fts(rowid, content, section)
+    VALUES (new.rowid, new.content, new.section);
+END;
+"""
+
 CREATE_PAPER_TAGS_TABLE = """
 CREATE TABLE IF NOT EXISTS paper_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,6 +205,11 @@ async def init_database():
         await db.execute(CREATE_FTS_INSERT_TRIGGER)
         await db.execute(CREATE_FTS_DELETE_TRIGGER)
         await db.execute(CREATE_FTS_UPDATE_TRIGGER)
+        await db.execute(CREATE_CHUNKS_FTS_TABLE)
+        await db.execute(CREATE_CHUNKS_FTS_INSERT_TRIGGER)
+        await db.execute(CREATE_CHUNKS_FTS_DELETE_TRIGGER)
+        await db.execute(CREATE_CHUNKS_FTS_UPDATE_TRIGGER)
+        await db.execute("INSERT INTO paper_chunks_fts(paper_chunks_fts) VALUES('rebuild')")
 
         # 索引
         for idx_sql in CREATE_INDEXES:
