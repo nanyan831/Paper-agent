@@ -70,6 +70,8 @@ def _build_context_messages(session: dict, recent_messages: list[dict]) -> list[
                 "content": f"以下是更早聊天的压缩摘要，只用于保持连续性：\n{summary}",
             }
         )
+    while recent_messages and recent_messages[0].get("role") != "user":
+        recent_messages = recent_messages[1:]
     for msg in recent_messages:
         if msg.get("role") in {"user", "assistant"}:
             context.append({"role": msg["role"], "content": msg.get("content") or ""})
