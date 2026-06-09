@@ -290,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === AI 对话逻辑 ===
     let currentChatMessages = [];
+    let currentChatSessionId = localStorage.getItem('paperAgentChatSessionId') || null;
     const chatInput = document.getElementById('chatInput');
     const chatSendBtn = document.getElementById('chatSendBtn');
     const chatHistory = document.getElementById('chatHistory');
@@ -300,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function openChatPanel() {
         chatPanel.classList.remove('hidden');
         chatToggleBtn.classList.add('hidden');
+        loadChatSession();
         scrollToBottom();
         chatInput.focus();
     }
@@ -374,6 +376,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 发送消息
+    async function loadChatSession() {
+        if (!currentChatSessionId || currentChatMessages.length > 0) return;
+        try {
+            const res = await fetch(`/api/agent/chat/${currentChatSessionId}`);
+            if (!res.ok) {
+                localStorage.removeItem('paperAgentChatSessionId');
+                currentChatSessionId = null;
+                return;
+            }
+            const data = await res.json();
+            currentChatMessages = data.messages || [];
+            renderChatMessages();
+        } catch (error) {
+            console.warn('Load chat session failed:', error);
+        }
+    }
+
     async function sendChatMessage() {
         const text = chatInput.value.trim();
         if (!text) return;
@@ -406,11 +425,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/agent/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: currentChatMessages })
+                body: JSON.stringify({
+                    session_id: currentChatSessionId,
+                    message: text
+                })
             });
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.detail || '请求失败');
+            }
             
             // 用后端返回的带有上下文和工具调用结果的 messages 覆盖当前数组
+            if (data.session_id) {
+                currentChatSessionId = data.session_id;
+                localStorage.setItem('paperAgentChatSessionId', currentChatSessionId);
+            }
             if (data.messages) {
                 currentChatMessages = data.messages;
             }

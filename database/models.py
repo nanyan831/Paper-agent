@@ -125,6 +125,44 @@ CREATE TABLE IF NOT EXISTS search_history (
 );
 """
 
+CREATE_CHAT_SESSIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    summary TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+CREATE_CHAT_MESSAGES_TABLE = """
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT,
+    tool_name TEXT,
+    metadata TEXT,
+    token_estimate INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+"""
+
+CREATE_MODEL_USAGE_LOGS_TABLE = """
+CREATE TABLE IF NOT EXISTS model_usage_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    model TEXT,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    tool_calls INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL
+);
+"""
+
 # FTS5 全文搜索虚拟表
 CREATE_FTS_TABLE = """
 CREATE VIRTUAL TABLE IF NOT EXISTS papers_fts USING fts5(
@@ -169,6 +207,8 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_papers_language ON papers(language);",
     "CREATE INDEX IF NOT EXISTS idx_papers_favorited ON papers(is_favorited);",
     "CREATE INDEX IF NOT EXISTS idx_chunks_paper ON paper_chunks(paper_id);",
+    "CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage_logs(session_id);",
     "CREATE INDEX IF NOT EXISTS idx_paper_tags_paper ON paper_tags(paper_id);",
     "CREATE INDEX IF NOT EXISTS idx_paper_tags_tag ON paper_tags(tag);",
     "CREATE INDEX IF NOT EXISTS idx_crawl_logs_source ON crawl_logs(source);",
@@ -199,6 +239,9 @@ async def init_database():
         await db.execute(CREATE_CRAWL_LOGS_TABLE)
         await db.execute(CREATE_RSS_SOURCES_TABLE)
         await db.execute(CREATE_SEARCH_HISTORY_TABLE)
+        await db.execute(CREATE_CHAT_SESSIONS_TABLE)
+        await db.execute(CREATE_CHAT_MESSAGES_TABLE)
+        await db.execute(CREATE_MODEL_USAGE_LOGS_TABLE)
 
         # FTS 全文搜索
         await db.execute(CREATE_FTS_TABLE)

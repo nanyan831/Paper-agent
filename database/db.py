@@ -1,6 +1,7 @@
 """
 数据库操作管理器 —— 封装所有 CRUD 操作
 """
+import json
 import uuid
 import aiosqlite
 from datetime import datetime
@@ -401,6 +402,118 @@ class DatabaseManager:
             await db.commit()
 
     # ==================== DOI 存在性检查 ====================
+
+    # ==================== Chat sessions ====================
+
+    async def create_chat_session(self, title: str = "New chat") -> str:
+        session_id = str(uuid.uuid4())
+        async with self._get_conn() as db:
+            await db.execute(
+                "INSERT INTO chat_sessions (id, title) VALUES (?, ?)",
+                (session_id, title[:80] if title else "New chat"),
+            )
+            await db.commit()
+            return session_id
+
+    async def get_chat_session(self, session_id: str) -> Optional[dict]:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                "SELECT * FROM chat_sessions WHERE id = ?",
+                (session_id,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def list_chat_messages(self, session_id: str, limit: int = 200) -> list[dict]:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT id, session_id, role, content, tool_name, metadata,
+                          token_estimate, created_at
+                   FROM chat_messages
+                   WHERE session_id = ?
+                   ORDER BY rowid ASC
+                   LIMIT ?""",
+                (session_id, limit),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_recent_chat_messages(self, session_id: str, limit: int = 10) -> list[dict]:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT id, session_id, role, content, tool_name, metadata,
+                          token_estimate, created_at
+                   FROM chat_messages
+                   WHERE session_id = ? AND role IN ('user', 'assistant')
+                   ORDER BY rowid DESC
+                   LIMIT ?""",
+                (session_id, limit),
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+            return list(reversed(rows))
+
+    async def add_chat_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str = "",
+        tool_name: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> str:
+        message_id = str(uuid.uuid4())
+        token_estimate = max(1, len(content or "") // 4)
+        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        async with self._get_conn() as db:
+            await db.execute(
+                """INSERT INTO chat_messages
+                   (id, session_id, role, content, tool_name, metadata, token_estimate)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    message_id,
+                    session_id,
+                    role,
+                    content or "",
+                    tool_name,
+                    metadata_json,
+                    token_estimate,
+                ),
+            )
+            await db.execute(
+                "UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (session_id,),
+            )
+            await db.commit()
+            return message_id
+
+    async def update_chat_summary(self, session_id: str, summary: str) -> bool:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """UPDATE chat_sessions
+                   SET summary = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (summary[:4000], session_id),
+            )
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def record_model_usage(
+        self,
+        session_id: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        total_tokens: int = 0,
+        tool_calls: int = 0,
+    ) -> int:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """INSERT INTO model_usage_logs
+                   (session_id, model, input_tokens, output_tokens, total_tokens, tool_calls)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (session_id, model, input_tokens, output_tokens, total_tokens, tool_calls),
+            )
+            await db.commit()
+            return cursor.lastrowid
 
     async def doi_exists(self, doi: str) -> bool:
         """检查 DOI 是否已存在"""

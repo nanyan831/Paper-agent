@@ -1,94 +1,116 @@
 import json
 import logging
+
 from openai import AsyncOpenAI
-from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+
 from agent_tools.tools import invoke_tool
+from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 
 logger = logging.getLogger(__name__)
 
-# DeepSeek 兼容 OpenAI 格式
-client = AsyncOpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_BASE_URL
-)
+client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
-# 将本地 Agent 工具转换为 OpenAI Function Calling Schema
 TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
             "name": "search_papers",
-            "description": "自然语言或关键词搜索记忆库中的论文文献",
+            "description": "Search paper metadata and abstracts in the local memory database.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "搜索关键词或问题"},
-                    "top_k": {"type": "integer", "description": "返回条数，默认20"},
-                    "search_type": {"type": "string", "enum": ["hybrid", "semantic", "keyword"], "description": "检索方式，推荐使用hybrid"}
+                    "query": {"type": "string", "description": "Search keywords or natural-language question."},
+                    "top_k": {"type": "integer", "description": "Number of results to return. Default 10."},
+                    "search_type": {
+                        "type": "string",
+                        "enum": ["hybrid", "semantic", "keyword"],
+                        "description": "Search mode. Prefer hybrid.",
+                    },
                 },
-                "required": ["query"]
-            }
-        }
+                "required": ["query"],
+            },
+        },
     },
     {
         "type": "function",
         "function": {
             "name": "search_chunks",
-            "description": "检索本地论文全文切块，适合回答论文内容细节、方法、结论、证据引用等问题。优先用于需要基于全文片段回答的场景。",
+            "description": (
+                "Search local full-text paper chunks. Use this first for questions about "
+                "paper methods, evidence, conclusions, details, or citations."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "用户问题或要检索的全文证据主题"},
-                    "top_k": {"type": "integer", "description": "返回片段数，默认5，通常不要超过8"},
-                    "search_type": {"type": "string", "enum": ["hybrid", "semantic", "keyword"], "description": "检索方式，推荐 hybrid"},
+                    "query": {"type": "string", "description": "Question or full-text evidence topic."},
+                    "top_k": {"type": "integer", "description": "Number of chunks to return. Usually <= 8."},
+                    "search_type": {
+                        "type": "string",
+                        "enum": ["hybrid", "semantic", "keyword"],
+                        "description": "Search mode. Prefer hybrid.",
+                    },
                     "filters": {
                         "type": "object",
-                        "description": "可选过滤条件，例如 {'paper_id': '...'} 限定某篇论文",
-                        "additionalProperties": {"type": "string"}
-                    }
+                        "description": "Optional filters, for example {'paper_id': '...'}",
+                        "additionalProperties": {"type": "string"},
+                    },
                 },
-                "required": ["query"]
-            }
-        }
+                "required": ["query"],
+            },
+        },
     },
     {
         "type": "function",
         "function": {
             "name": "crawl_papers",
-            "description": "触发后台爬虫去指定平台抓取最新论文",
+            "description": "Trigger a background crawler to fetch papers from a given source.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source": {"type": "string", "enum": ["arxiv", "semantic_scholar", "crossref", "cnki", "rss"], "description": "数据源"},
-                    "topic": {"type": "string", "description": "搜索的主题或关键词"},
-                    "max_results": {"type": "integer", "description": "最大抓取数，默认20"}
+                    "source": {
+                        "type": "string",
+                        "enum": ["arxiv", "semantic_scholar", "crossref", "cnki", "rss"],
+                        "description": "Paper source.",
+                    },
+                    "topic": {"type": "string", "description": "Topic or keywords to crawl."},
+                    "max_results": {"type": "integer", "description": "Maximum number of results. Default 50."},
                 },
-                "required": ["source"]
-            }
-        }
+                "required": ["source"],
+            },
+        },
     },
     {
         "type": "function",
         "function": {
             "name": "get_memory_stats",
-            "description": "获取当前论文记忆库的总体统计信息（文献数、收藏数、爬虫执行次数等）",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    }
+            "description": "Get local paper memory statistics.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
-async def chat_with_agent(messages: list) -> list:
-    """
-    处理多轮对话并执行必要的工具调用
-    返回更新后的 messages 列表（包含助手的回复及中间的 tool_calls）
-    """
+
+def _add_usage(totals: dict, usage) -> None:
+    if not usage:
+        return
+    totals["input_tokens"] += getattr(usage, "prompt_tokens", 0) or 0
+    totals["output_tokens"] += getattr(usage, "completion_tokens", 0) or 0
+    totals["total_tokens"] += getattr(usage, "total_tokens", 0) or 0
+
+
+async def chat_with_agent_result(messages: list) -> dict:
+    """Run an agent chat turn and return messages plus usage totals."""
+    usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    tool_call_count = 0
+
     if not DEEPSEEK_API_KEY or DEEPSEEK_API_KEY == "your_api_key_here":
-        messages.append({"role": "assistant", "content": "系统提示：请先在 .env 文件中配置真实的 DEEPSEEK_API_KEY，然后重启服务。"})
-        return messages
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "系统提示：请先在 .env 文件中配置真实的 DEEPSEEK_API_KEY，然后重启服务。",
+            }
+        )
+        return {"messages": messages, "usage": usage_totals, "tool_calls": tool_call_count}
 
     max_loops = 5
     loop_count = 0
@@ -100,43 +122,44 @@ async def chat_with_agent(messages: list) -> list:
                 model=DEEPSEEK_MODEL,
                 messages=messages,
                 tools=TOOLS_SCHEMA,
-                tool_choice="auto"
+                tool_choice="auto",
             )
-            
+            _add_usage(usage_totals, getattr(response, "usage", None))
+
             message = response.choices[0].message
-            
-            # 记录模型的回复或函数调用请求
             msg_dict = message.model_dump(exclude_none=True)
             messages.append(msg_dict)
-            
-            # 如果模型没有调用工具，说明对话结束
+
             if not message.tool_calls:
                 break
-                
-            # 执行所有工具调用
+
+            tool_call_count += len(message.tool_calls)
             for tool_call in message.tool_calls:
                 func_name = tool_call.function.name
                 try:
                     args = json.loads(tool_call.function.arguments)
                 except json.JSONDecodeError:
                     args = {}
-                
-                logger.info(f"Agent 调用工具: {func_name}, 参数: {args}")
-                
-                # 调用本地工具函数
+
+                logger.info("Agent calling tool %s with args %s", func_name, args)
                 tool_res = await invoke_tool(func_name, args)
-                
-                # 将工具执行结果添加进上下文
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": func_name,
-                    "content": json.dumps(tool_res.model_dump(), ensure_ascii=False)
-                })
-                
-        except Exception as e:
-            logger.error(f"DeepSeek API 请求失败: {e}")
-            messages.append({"role": "assistant", "content": f"遇到错误: {str(e)}"})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": func_name,
+                        "content": json.dumps(tool_res.model_dump(), ensure_ascii=False),
+                    }
+                )
+
+        except Exception as exc:
+            logger.error("DeepSeek API request failed: %s", exc)
+            messages.append({"role": "assistant", "content": f"遇到错误: {exc}"})
             break
 
-    return messages
+    return {"messages": messages, "usage": usage_totals, "tool_calls": tool_call_count}
+
+
+async def chat_with_agent(messages: list) -> list:
+    result = await chat_with_agent_result(messages)
+    return result["messages"]
