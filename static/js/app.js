@@ -96,10 +96,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div>
                         ${hasPdf ? `
-                        <button class="icon-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="?? PDF">
+                        <button class="icon-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="Read PDF">
                             <i class="fa-solid fa-book-open-reader"></i>
                         </button>` : ''}
-                        <button class="icon-btn ${paper.is_favorited ? 'active' : ''}" onclick="toggleFavorite('${escapeHtmlGlobal(paper.id)}', this)" title="??">
+                        <button class="icon-btn ${paper.is_favorited ? 'active' : ''}" onclick="toggleFavorite('${escapeHtmlGlobal(paper.id)}', this)" title="Favorite">
                             <i class="fa-solid fa-star"></i>
                         </button>
                         ${paper.url ? `
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             readerChunks.innerHTML = chunks.map(chunk => `
                 <button class="reader-chunk" data-page="${chunk.page_start || 1}">
-                    <span>Chunk ${chunk.chunk_index + 1}${chunk.page_start ? ` ? p.${chunk.page_start}${chunk.page_end && chunk.page_end !== chunk.page_start ? `-${chunk.page_end}` : ''}` : ''}</span>
+                    <span>Chunk ${chunk.chunk_index + 1}${chunk.page_start ? ` - p.${chunk.page_start}${chunk.page_end && chunk.page_end !== chunk.page_start ? `-${chunk.page_end}` : ''}` : ''}</span>
                     <p>${escapeHtmlGlobal((chunk.content || '').slice(0, 220))}</p>
                 </button>
             `).join('');
