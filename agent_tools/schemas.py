@@ -19,6 +19,13 @@ class SearchPapersParams(BaseModel):
     search_type: str = Field("hybrid", description="搜索类型: hybrid, semantic, keyword")
 
 
+class SearchChunksParams(BaseModel):
+    query: str = Field(..., description="用于检索全文片段的自然语言问题或关键词")
+    top_k: int = Field(5, description="返回的最大片段数")
+    filters: Optional[Dict[str, str]] = Field(None, description="过滤条件，如 {'paper_id': '...'}")
+    search_type: str = Field("hybrid", description="检索类型: hybrid, semantic, keyword")
+
+
 class CrawlPapersParams(BaseModel):
     topic: Optional[str] = Field(None, description="要爬取的主题/关键词")
     source: str = Field("arxiv", description="爬虫数据源: arxiv, semantic_scholar, crossref, cnki, rss")

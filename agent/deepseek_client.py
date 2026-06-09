@@ -33,6 +33,27 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "search_chunks",
+            "description": "检索本地论文全文切块，适合回答论文内容细节、方法、结论、证据引用等问题。优先用于需要基于全文片段回答的场景。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "用户问题或要检索的全文证据主题"},
+                    "top_k": {"type": "integer", "description": "返回片段数，默认5，通常不要超过8"},
+                    "search_type": {"type": "string", "enum": ["hybrid", "semantic", "keyword"], "description": "检索方式，推荐 hybrid"},
+                    "filters": {
+                        "type": "object",
+                        "description": "可选过滤条件，例如 {'paper_id': '...'} 限定某篇论文",
+                        "additionalProperties": {"type": "string"}
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "crawl_papers",
             "description": "触发后台爬虫去指定平台抓取最新论文",
             "parameters": {

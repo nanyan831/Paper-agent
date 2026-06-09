@@ -11,6 +11,7 @@ from crawlers.manager import CrawlerManager
 from .schemas import (
     ToolResponse,
     SearchPapersParams,
+    SearchChunksParams,
     CrawlPapersParams,
     AddPaperParams,
     GetPaperDetailParams,
@@ -18,6 +19,51 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+SNIPPET_CHARS = 900
+
+
+def _snippet(text: str, max_chars: int = SNIPPET_CHARS) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0] + "..."
+
+
+def _slim_paper_result(paper: dict) -> dict:
+    return {
+        "paper_id": paper.get("id"),
+        "title": paper.get("title"),
+        "authors": paper.get("authors"),
+        "source": paper.get("source"),
+        "publish_date": paper.get("publish_date"),
+        "journal": paper.get("journal"),
+        "doi": paper.get("doi"),
+        "url": paper.get("url"),
+        "search_score": paper.get("search_score"),
+        "search_type": paper.get("search_type"),
+        "abstract_snippet": _snippet(paper.get("abstract", ""), 600),
+    }
+
+
+def _slim_chunk_result(chunk: dict) -> dict:
+    return {
+        "chunk_id": chunk.get("id"),
+        "paper_id": chunk.get("paper_id"),
+        "title": chunk.get("title"),
+        "authors": chunk.get("authors"),
+        "source": chunk.get("source"),
+        "publish_date": chunk.get("publish_date"),
+        "journal": chunk.get("journal"),
+        "doi": chunk.get("doi"),
+        "url": chunk.get("url"),
+        "section": chunk.get("section"),
+        "page_start": chunk.get("page_start"),
+        "page_end": chunk.get("page_end"),
+        "search_score": chunk.get("search_score"),
+        "search_type": chunk.get("search_type"),
+        "snippet": _snippet(chunk.get("content", "")),
+    }
 
 # 全局实例依赖（将在 main.py 初始化时注入）
 _db: DatabaseManager = None
@@ -40,15 +86,31 @@ def init_tools_dependencies(
 
 async def tool_search_papers(params: SearchPapersParams) -> ToolResponse:
     try:
+        top_k = min(params.top_k, 8)
         results = await _retriever.search(
             query=params.query,
-            top_k=params.top_k,
+            top_k=top_k,
             filters=params.filters,
             search_type=params.search_type
         )
-        return ToolResponse(success=True, data=results)
+        return ToolResponse(success=True, data=[_slim_paper_result(r) for r in results])
     except Exception as e:
         logger.error(f"tool_search_papers err: {e}")
+        return ToolResponse(success=False, message=str(e))
+
+
+async def tool_search_chunks(params: SearchChunksParams) -> ToolResponse:
+    try:
+        top_k = min(params.top_k, 8)
+        results = await _retriever.search_chunks(
+            query=params.query,
+            top_k=top_k,
+            filters=params.filters,
+            search_type=params.search_type
+        )
+        return ToolResponse(success=True, data=[_slim_chunk_result(r) for r in results])
+    except Exception as e:
+        logger.error(f"tool_search_chunks err: {e}")
         return ToolResponse(success=False, message=str(e))
 
 
@@ -113,6 +175,7 @@ async def tool_get_memory_stats(params: Any = None) -> ToolResponse:
 # 注册所有工具
 agent_tools_registry: Dict[str, Callable] = {
     "search_papers": (tool_search_papers, SearchPapersParams),
+    "search_chunks": (tool_search_chunks, SearchChunksParams),
     "crawl_papers": (tool_crawl_papers, CrawlPapersParams),
     "add_paper": (tool_add_paper, AddPaperParams),
     "get_paper_detail": (tool_get_paper_detail, GetPaperDetailParams),
