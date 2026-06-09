@@ -390,6 +390,45 @@ class DatabaseManager:
             cursor = await db.execute("SELECT COUNT(*) as cnt FROM search_history")
             stats["total_searches"] = (await cursor.fetchone())["cnt"]
 
+            cursor = await db.execute(
+                """SELECT
+                       COUNT(*) as total_calls,
+                       COALESCE(SUM(input_tokens), 0) as input_tokens,
+                       COALESCE(SUM(output_tokens), 0) as output_tokens,
+                       COALESCE(SUM(total_tokens), 0) as total_tokens,
+                       COALESCE(SUM(tool_calls), 0) as tool_calls
+                   FROM model_usage_logs"""
+            )
+            usage_row = await cursor.fetchone()
+
+            cursor = await db.execute(
+                """SELECT model, COUNT(*) as calls, COALESCE(SUM(total_tokens), 0) as total_tokens
+                   FROM model_usage_logs
+                   GROUP BY model
+                   ORDER BY total_tokens DESC"""
+            )
+            usage_by_model = [dict(r) for r in await cursor.fetchall()]
+
+            cursor = await db.execute(
+                """SELECT u.id, u.session_id, s.title, u.model, u.input_tokens,
+                          u.output_tokens, u.total_tokens, u.tool_calls, u.created_at
+                   FROM model_usage_logs u
+                   LEFT JOIN chat_sessions s ON s.id = u.session_id
+                   ORDER BY u.id DESC
+                   LIMIT 10"""
+            )
+            recent_usage = [dict(r) for r in await cursor.fetchall()]
+
+            stats["agent_usage"] = {
+                "total_calls": usage_row["total_calls"],
+                "input_tokens": usage_row["input_tokens"],
+                "output_tokens": usage_row["output_tokens"],
+                "total_tokens": usage_row["total_tokens"],
+                "tool_calls": usage_row["tool_calls"],
+                "by_model": usage_by_model,
+                "recent": recent_usage,
+            }
+
             return stats
 
     async def record_search(self, query: str, results_count: int, search_type: str = "hybrid"):

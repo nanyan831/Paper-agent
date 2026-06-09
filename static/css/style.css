@@ -516,6 +516,59 @@ body {
 }
 
 /* 弹窗 */
+.usage-panel {
+    grid-column: 1 / -1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 24px;
+}
+
+.usage-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.usage-panel-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.usage-panel-header span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.usage-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.usage-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 680px;
+}
+
+.usage-table th,
+.usage-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    font-size: 13px;
+}
+
+.usage-table th {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.usage-table td {
+    color: var(--text-primary);
+}
 .modal {
     display: none;
     position: fixed;

@@ -258,23 +258,74 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/stats');
             const stats = await res.json();
+            const usage = stats.agent_usage || {};
+            const formatNumber = (value) => Number(value || 0).toLocaleString();
+            const recentRows = (usage.recent || []).map(item => `
+                <tr>
+                    <td>${item.created_at || '-'}</td>
+                    <td>${item.model || '-'}</td>
+                    <td>${formatNumber(item.input_tokens)}</td>
+                    <td>${formatNumber(item.output_tokens)}</td>
+                    <td>${formatNumber(item.total_tokens)}</td>
+                    <td>${formatNumber(item.tool_calls)}</td>
+                </tr>
+            `).join('');
             
             grid.innerHTML = `
                 <div class="stat-card">
-                    <div class="stat-value">${stats.total_papers}</div>
+                    <div class="stat-value">${formatNumber(stats.total_papers)}</div>
                     <div class="stat-label">文献总数</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" style="color: #eab308;">${stats.favorited_papers}</div>
+                    <div class="stat-value" style="color: #eab308;">${formatNumber(stats.favorited_papers)}</div>
                     <div class="stat-label">已收藏</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" style="color: var(--accent-secondary);">${stats.total_crawls}</div>
+                    <div class="stat-value" style="color: var(--accent-secondary);">${formatNumber(stats.total_crawls)}</div>
                     <div class="stat-label">爬虫执行次数</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" style="color: #10b981;">${stats.total_searches}</div>
+                    <div class="stat-value" style="color: #10b981;">${formatNumber(stats.total_searches)}</div>
                     <div class="stat-label">智能检索次数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: #38bdf8;">${formatNumber(usage.total_calls)}</div>
+                    <div class="stat-label">Agent 调用次数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: #f97316;">${formatNumber(usage.total_tokens)}</div>
+                    <div class="stat-label">累计 Token</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatNumber(usage.input_tokens)}</div>
+                    <div class="stat-label">输入 Token</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatNumber(usage.output_tokens)}</div>
+                    <div class="stat-label">输出 Token</div>
+                </div>
+                <div class="usage-panel">
+                    <div class="usage-panel-header">
+                        <h3>最近 Agent 调用</h3>
+                        <span>工具调用 ${formatNumber(usage.tool_calls)} 次</span>
+                    </div>
+                    <div class="usage-table-wrap">
+                        <table class="usage-table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>模型</th>
+                                    <th>输入</th>
+                                    <th>输出</th>
+                                    <th>总计</th>
+                                    <th>工具</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${recentRows || '<tr><td colspan="6">暂无 Agent 调用记录</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
         } catch (error) {
