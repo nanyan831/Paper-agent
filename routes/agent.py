@@ -1,3 +1,4 @@
+import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -106,6 +107,21 @@ def _assistant_tool_names(message: dict) -> list[str]:
     return names
 
 
+def _tool_message_metadata(msg: dict) -> dict:
+    metadata = {"tool_call_id": msg.get("tool_call_id")}
+    if msg.get("name") != "search_chunks":
+        return metadata
+
+    try:
+        payload = json.loads(msg.get("content") or "{}")
+    except json.JSONDecodeError:
+        return metadata
+
+    if payload.get("success") and isinstance(payload.get("data"), list):
+        metadata["rag_hits"] = payload["data"][:8]
+    return metadata
+
+
 async def _persist_agent_result(session_id: str, result_messages: list[dict], context_len: int) -> None:
     new_messages = result_messages[context_len:]
     for msg in new_messages:
@@ -131,7 +147,7 @@ async def _persist_agent_result(session_id: str, result_messages: list[dict], co
                 "tool",
                 content[:2000],
                 tool_name=msg.get("name"),
-                metadata={"tool_call_id": msg.get("tool_call_id")},
+                metadata=_tool_message_metadata(msg),
             )
 
 

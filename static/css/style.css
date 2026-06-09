@@ -569,6 +569,72 @@ body {
 .usage-table td {
     color: var(--text-primary);
 }
+
+.rag-debug-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.rag-hit-list {
+    display: grid;
+    gap: 14px;
+}
+
+.rag-call-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.rag-call-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.rag-call-header strong {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.rag-call-header span {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.rag-hit-item {
+    padding: 12px 0;
+    border-top: 1px solid var(--border-color);
+}
+
+.rag-hit-title {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.rag-hit-meta {
+    color: var(--accent-secondary);
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.rag-hit-item p,
+.rag-empty {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.rag-empty {
+    padding: 8px 0;
+}
 .modal {
     display: none;
     position: fixed;

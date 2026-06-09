@@ -428,6 +428,7 @@ class DatabaseManager:
                 "by_model": usage_by_model,
                 "recent": recent_usage,
             }
+            stats["recent_rag_hits"] = await self.get_recent_rag_hits(limit=8)
 
             return stats
 
@@ -490,6 +491,48 @@ class DatabaseManager:
             )
             rows = [dict(r) for r in await cursor.fetchall()]
             return list(reversed(rows))
+
+    async def get_recent_rag_hits(self, limit: int = 8) -> list[dict]:
+        """Return recent search_chunks tool calls with their retrieved chunk hits."""
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT m.id, m.session_id, s.title, m.content, m.metadata, m.created_at
+                   FROM chat_messages m
+                   LEFT JOIN chat_sessions s ON s.id = m.session_id
+                   WHERE m.role = 'tool' AND m.tool_name = 'search_chunks'
+                   ORDER BY m.rowid DESC
+                   LIMIT ?""",
+                (limit,),
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+
+        calls = []
+        for row in rows:
+            metadata = {}
+            if row.get("metadata"):
+                try:
+                    metadata = json.loads(row["metadata"])
+                except json.JSONDecodeError:
+                    metadata = {}
+
+            hits = metadata.get("rag_hits")
+            if hits is None and row.get("content"):
+                try:
+                    tool_payload = json.loads(row["content"])
+                    hits = tool_payload.get("data") or []
+                except json.JSONDecodeError:
+                    hits = []
+
+            calls.append(
+                {
+                    "message_id": row["id"],
+                    "session_id": row["session_id"],
+                    "session_title": row.get("title"),
+                    "created_at": row["created_at"],
+                    "hits": hits or [],
+                }
+            )
+        return calls
 
     async def add_chat_message(
         self,

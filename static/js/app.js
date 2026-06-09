@@ -260,16 +260,43 @@ document.addEventListener('DOMContentLoaded', () => {
             const stats = await res.json();
             const usage = stats.agent_usage || {};
             const formatNumber = (value) => Number(value || 0).toLocaleString();
+            const escapeHtml = (value) => String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
             const recentRows = (usage.recent || []).map(item => `
                 <tr>
-                    <td>${item.created_at || '-'}</td>
-                    <td>${item.model || '-'}</td>
+                    <td>${escapeHtml(item.created_at || '-')}</td>
+                    <td>${escapeHtml(item.model || '-')}</td>
                     <td>${formatNumber(item.input_tokens)}</td>
                     <td>${formatNumber(item.output_tokens)}</td>
                     <td>${formatNumber(item.total_tokens)}</td>
                     <td>${formatNumber(item.tool_calls)}</td>
                 </tr>
             `).join('');
+            const ragPanels = (stats.recent_rag_hits || []).map(call => {
+                const hits = (call.hits || []).slice(0, 5).map(hit => `
+                    <div class="rag-hit-item">
+                        <div class="rag-hit-title">${escapeHtml(hit.title || '未命名论文')}</div>
+                        <div class="rag-hit-meta">
+                            ${escapeHtml(hit.search_type || '-')} · score ${Number(hit.search_score || 0).toFixed(4)}
+                            ${hit.page_start ? ` · p.${hit.page_start}${hit.page_end && hit.page_end !== hit.page_start ? `-${hit.page_end}` : ''}` : ''}
+                        </div>
+                        <p>${escapeHtml(hit.snippet || '')}</p>
+                    </div>
+                `).join('');
+                return `
+                    <div class="rag-call-card">
+                        <div class="rag-call-header">
+                            <strong>${escapeHtml(call.session_title || '未命名会话')}</strong>
+                            <span>${escapeHtml(call.created_at || '-')}</span>
+                        </div>
+                        ${hits || '<p class="rag-empty">这次检索没有返回全文片段</p>'}
+                    </div>
+                `;
+            }).join('');
             
             grid.innerHTML = `
                 <div class="stat-card">
@@ -325,6 +352,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ${recentRows || '<tr><td colspan="6">暂无 Agent 调用记录</td></tr>'}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+                <div class="usage-panel rag-debug-panel">
+                    <div class="usage-panel-header">
+                        <h3>最近 RAG 命中</h3>
+                        <span>search_chunks 调试记录</span>
+                    </div>
+                    <div class="rag-hit-list">
+                        ${ragPanels || '<p class="rag-empty">暂无 RAG 检索记录。先在 AI 对话里问一个需要查论文全文的问题。</p>'}
                     </div>
                 </div>
             `;
