@@ -16,9 +16,11 @@ DISPLAY_MESSAGE_LIMIT = 200
 SUMMARY_MESSAGE_THRESHOLD = 16
 
 SYSTEM_PROMPT = (
-    "你是一个智能学术助手。回答论文内容、方法、结论、证据时，优先调用 search_chunks "
-    "检索本地全文片段；如果本地全文不足，再调用 search_papers 查询论文摘要和元数据，"
-    "必要时建议用户导入 PDF 或触发爬虫。回答要简洁、专业，并说明依据来自全文片段还是摘要元数据。"
+    "你是一个智能学术助手。回答论文内容、方法、结论、证据时，必须优先调用 search_chunks "
+    "检索本地全文片段；如果本地全文不足，再调用 search_papers 查询论文摘要和元数据。"
+    "使用 search_chunks 后，最终回答必须尽量附上可追溯来源，至少包含论文名、页码范围和原文片段。"
+    "如果本地论文库没有检索到相关全文证据，要明确说明“本地论文库没有找到可引用依据”，不要编造来源。"
+    "回答要简洁、专业，并区分依据来自全文片段还是摘要元数据。"
 )
 
 
@@ -122,8 +124,98 @@ def _tool_message_metadata(msg: dict) -> dict:
     return metadata
 
 
+def _short_snippet(text: str, max_chars: int = 220) -> str:
+    snippet = " ".join((text or "").split())
+    if len(snippet) <= max_chars:
+        return snippet
+    return snippet[:max_chars].rstrip() + "..."
+
+
+def _format_page_range(hit: dict) -> str:
+    start = hit.get("page_start")
+    end = hit.get("page_end")
+    if start and end and start != end:
+        return f"第 {start}-{end} 页"
+    if start:
+        return f"第 {start} 页"
+    if end:
+        return f"第 {end} 页"
+    return "页码未知"
+
+
+def _extract_rag_hits(messages: list[dict]) -> tuple[bool, list[dict]]:
+    searched_chunks = False
+    hits: list[dict] = []
+    seen = set()
+
+    for msg in messages:
+        if msg.get("role") != "tool" or msg.get("name") != "search_chunks":
+            continue
+        searched_chunks = True
+        try:
+            payload = json.loads(msg.get("content") or "{}")
+        except json.JSONDecodeError:
+            continue
+
+        if not payload.get("success") or not isinstance(payload.get("data"), list):
+            continue
+
+        for hit in payload["data"]:
+            chunk_id = hit.get("chunk_id") or hit.get("id")
+            dedupe_key = chunk_id or (
+                hit.get("paper_id"),
+                hit.get("page_start"),
+                hit.get("page_end"),
+                hit.get("snippet"),
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            hits.append(hit)
+
+    return searched_chunks, hits
+
+
+def _build_sources_block(rag_hits: list[dict], max_sources: int = 4) -> str:
+    lines = ["", "", "本地引用来源："]
+    for index, hit in enumerate(rag_hits[:max_sources], start=1):
+        title = hit.get("title") or "未知论文"
+        page_range = _format_page_range(hit)
+        snippet = _short_snippet(hit.get("snippet") or hit.get("content") or "")
+        if snippet:
+            lines.append(f"{index}. 《{title}》，{page_range}：{snippet}")
+        else:
+            lines.append(f"{index}. 《{title}》，{page_range}")
+    return "\n".join(lines)
+
+
+def _append_rag_sources_to_final_answer(messages: list[dict]) -> None:
+    searched_chunks, rag_hits = _extract_rag_hits(messages)
+    if not searched_chunks:
+        return
+
+    final_answer = None
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant" and (msg.get("content") or "").strip():
+            final_answer = msg
+            break
+    if final_answer is None:
+        return
+
+    content = final_answer.get("content") or ""
+    if rag_hits:
+        if "本地引用来源：" not in content:
+            final_answer["content"] = content.rstrip() + _build_sources_block(rag_hits)
+    elif "本地论文库没有找到可引用依据" not in content:
+        final_answer["content"] = (
+            content.rstrip()
+            + "\n\n本地论文库没有找到可引用依据；以上内容不能视为基于本地全文的结论。"
+        )
+
+
 async def _persist_agent_result(session_id: str, result_messages: list[dict], context_len: int) -> None:
     new_messages = result_messages[context_len:]
+    _append_rag_sources_to_final_answer(new_messages)
     for msg in new_messages:
         role = msg.get("role")
         if role == "assistant":
