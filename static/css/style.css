@@ -263,6 +263,136 @@ body {
     gap: 20px;
 }
 
+.recent-imports-panel {
+    margin: 0 0 30px;
+    background: rgba(35, 39, 48, 0.56);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px;
+}
+
+.section-headline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.section-headline h3 {
+    font-size: 17px;
+    margin: 0 0 2px;
+}
+
+.section-headline p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin: 0;
+}
+
+.ghost-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ghost-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+    background: var(--bg-hover);
+}
+
+.recent-pdf-list {
+    display: grid;
+    gap: 10px;
+}
+
+.recent-pdf-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.recent-pdf-main {
+    min-width: 0;
+}
+
+.recent-pdf-main h4 {
+    font-size: 15px;
+    line-height: 1.4;
+    margin: 0 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-pdf-main p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin: 0 0 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-pdf-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.recent-pdf-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.reader-open-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent-glow);
+    color: var(--accent-primary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.reader-open-btn:hover {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.recent-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 54px;
+    color: var(--text-muted);
+    font-size: 13px;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.recent-placeholder.error {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
 .paper-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -739,6 +869,8 @@ body {
 
 #pdfCanvas {
     background: white;
+    display: block;
+    max-width: none;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
@@ -774,6 +906,11 @@ body {
 .reader-chunk:hover {
     border-color: var(--border-focus);
     background: var(--bg-hover);
+}
+
+.reader-chunk.active {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.14);
 }
 
 .reader-chunk span {

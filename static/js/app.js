@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchBtn = document.getElementById('searchBtn');
     const searchResults = document.getElementById('searchResults');
     const searchLoading = document.getElementById('searchLoading');
+    const recentPdfs = document.getElementById('recentPdfs');
+    const refreshRecentPdfsBtn = document.getElementById('refreshRecentPdfsBtn');
 
     async function performSearch() {
         const query = searchInput.value.trim();
@@ -120,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pageNum: 1,
         scale: 1.2,
         rendering: false,
+        renderError: null,
         pendingPage: null,
         returnView: 'search'
     };
@@ -130,6 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const readerPageCount = document.getElementById('readerPageCount');
     const readerChunks = document.getElementById('readerChunks');
     const pdfCanvas = document.getElementById('pdfCanvas');
+    const readerPrevBtn = document.getElementById('readerPrevBtn');
+    const readerNextBtn = document.getElementById('readerNextBtn');
+    const readerZoomOutBtn = document.getElementById('readerZoomOutBtn');
+    const readerZoomInBtn = document.getElementById('readerZoomInBtn');
 
     if (window.pdfjsLib) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -139,10 +146,98 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = readerState.pdfDoc ? readerState.pdfDoc.numPages : 0;
         readerPageInput.value = readerState.pageNum;
         readerPageInput.max = total || 1;
+        readerPageInput.disabled = !total;
         readerPageCount.textContent = `/ ${total}`;
-        document.getElementById('readerPrevBtn').disabled = !total || readerState.pageNum <= 1;
-        document.getElementById('readerNextBtn').disabled = !total || readerState.pageNum >= total;
-        readerStatus.textContent = total ? `Page ${readerState.pageNum} of ${total}` : 'No paper loaded';
+        readerPrevBtn.disabled = !total || readerState.pageNum <= 1;
+        readerNextBtn.disabled = !total || readerState.pageNum >= total;
+        readerZoomOutBtn.disabled = !total || readerState.scale <= 0.6;
+        readerZoomInBtn.disabled = !total || readerState.scale >= 2.4;
+        if (readerState.renderError) {
+            readerStatus.textContent = readerState.renderError;
+        } else if (total) {
+            readerStatus.textContent = readerState.rendering
+                ? `Rendering page ${readerState.pageNum} of ${total}`
+                : `Page ${readerState.pageNum} of ${total} - ${Math.round(readerState.scale * 100)}%`;
+        } else {
+            readerStatus.textContent = 'No paper loaded';
+        }
+        highlightReaderChunks();
+    }
+
+    function renderRecentPdfs(papers) {
+        if (!recentPdfs) return;
+        const pdfPapers = (papers || []).filter(paper => paper.file_path || paper.source === 'local_pdf');
+        if (!pdfPapers.length) {
+            recentPdfs.innerHTML = `
+                <div class="recent-placeholder">
+                    <i class="fa-regular fa-file-pdf"></i>
+                    <span>No imported PDFs yet.</span>
+                </div>`;
+            return;
+        }
+
+        recentPdfs.innerHTML = pdfPapers.map(paper => {
+            const chunkCount = Number(paper.chunk_count || 0);
+            const pageCount = Number(paper.page_count || 0);
+            return `
+                <article class="recent-pdf-card">
+                    <div class="recent-pdf-main">
+                        <h4 title="${escapeHtmlGlobal(paper.title)}">${escapeHtmlGlobal(paper.title || 'Untitled PDF')}</h4>
+                        <p>${escapeHtmlGlobal(paper.authors || 'Unknown authors')}</p>
+                        <div class="recent-pdf-meta">
+                            ${pageCount ? `<span><i class="fa-regular fa-file-lines"></i> ${pageCount} pages</span>` : ''}
+                            <span><i class="fa-solid fa-layer-group"></i> ${chunkCount} chunks</span>
+                            <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlGlobal(paper.parse_status || 'unknown')}</span>
+                        </div>
+                    </div>
+                    <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="Open PDF">
+                        <i class="fa-solid fa-book-open-reader"></i>
+                    </button>
+                </article>`;
+        }).join('');
+    }
+
+    async function loadRecentPdfs() {
+        if (!recentPdfs) return;
+        recentPdfs.innerHTML = '<div class="recent-placeholder">Loading recent papers...</div>';
+        try {
+            const res = await fetch('/api/papers?source=local_pdf&limit=6');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Failed to load recent PDFs');
+            renderRecentPdfs(data.papers || []);
+        } catch (error) {
+            recentPdfs.innerHTML = `<div class="recent-placeholder error">${escapeHtmlGlobal(error.message)}</div>`;
+        }
+    }
+
+    if (refreshRecentPdfsBtn) {
+        refreshRecentPdfsBtn.addEventListener('click', loadRecentPdfs);
+    }
+
+    function clearReaderCanvas() {
+        const context = pdfCanvas.getContext('2d');
+        context.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    }
+
+    function highlightReaderChunks() {
+        readerChunks.querySelectorAll('.reader-chunk').forEach(btn => {
+            const start = Number(btn.dataset.pageStart || btn.dataset.page || 1);
+            const end = Number(btn.dataset.pageEnd || start);
+            btn.classList.toggle('active', readerState.pageNum >= start && readerState.pageNum <= end);
+        });
+    }
+
+    function resetReaderState() {
+        readerState.paperId = null;
+        readerState.paper = null;
+        readerState.pdfDoc = null;
+        readerState.pageNum = 1;
+        readerState.scale = 1.2;
+        readerState.rendering = false;
+        readerState.renderError = null;
+        readerState.pendingPage = null;
+        clearReaderCanvas();
+        updateReaderControls();
     }
 
     async function renderPdfPage(pageNum) {
@@ -151,14 +246,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         readerState.rendering = true;
-        const page = await readerState.pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: readerState.scale });
-        const context = pdfCanvas.getContext('2d');
-        pdfCanvas.width = viewport.width;
-        pdfCanvas.height = viewport.height;
-        await page.render({ canvasContext: context, viewport }).promise;
-        readerState.rendering = false;
+        readerState.renderError = null;
         updateReaderControls();
+        try {
+            const page = await readerState.pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: readerState.scale });
+            const context = pdfCanvas.getContext('2d');
+            pdfCanvas.width = Math.floor(viewport.width);
+            pdfCanvas.height = Math.floor(viewport.height);
+            clearReaderCanvas();
+            await page.render({ canvasContext: context, viewport }).promise;
+        } catch (error) {
+            console.error('PDF page render failed:', error);
+            readerState.renderError = `Page render failed: ${error.message}`;
+        } finally {
+            readerState.rendering = false;
+            updateReaderControls();
+        }
         if (readerState.pendingPage && readerState.pendingPage !== pageNum) {
             const pending = readerState.pendingPage;
             readerState.pendingPage = null;
@@ -171,7 +275,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function queuePdfPage(pageNum) {
         if (!readerState.pdfDoc) return;
         const total = readerState.pdfDoc.numPages;
-        readerState.pageNum = Math.min(Math.max(Number(pageNum) || 1, 1), total);
+        const requestedPage = parseInt(pageNum, 10);
+        readerState.pageNum = Math.min(Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1), total);
+        readerState.renderError = null;
         updateReaderControls();
         await renderPdfPage(readerState.pageNum);
     }
@@ -188,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             readerChunks.innerHTML = chunks.map(chunk => `
-                <button class="reader-chunk" data-page="${chunk.page_start || 1}">
+                <button class="reader-chunk" data-page="${chunk.page_start || 1}" data-page-start="${chunk.page_start || 1}" data-page-end="${chunk.page_end || chunk.page_start || 1}">
                     <span>Chunk ${chunk.chunk_index + 1}${chunk.page_start ? ` - p.${chunk.page_start}${chunk.page_end && chunk.page_end !== chunk.page_start ? `-${chunk.page_end}` : ''}` : ''}</span>
                     <p>${escapeHtmlGlobal((chunk.content || '').slice(0, 220))}</p>
                 </button>
@@ -196,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             readerChunks.querySelectorAll('.reader-chunk').forEach(btn => {
                 btn.addEventListener('click', () => queuePdfPage(Number(btn.dataset.page || 1)));
             });
+            highlightReaderChunks();
         } catch (error) {
             readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
         }
@@ -212,8 +319,9 @@ document.addEventListener('DOMContentLoaded', () => {
         readerTitle.textContent = 'Loading PDF...';
         readerStatus.textContent = 'Preparing reader';
         readerChunks.innerHTML = '<p class="reader-empty">Loading chunks...</p>';
-        const context = pdfCanvas.getContext('2d');
-        context.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+        resetReaderState();
+        readerTitle.textContent = 'Loading PDF...';
+        readerStatus.textContent = 'Preparing reader';
 
         try {
             const paperRes = await fetch(`/api/papers/${paperId}`);
@@ -226,11 +334,13 @@ document.addEventListener('DOMContentLoaded', () => {
             readerTitle.textContent = paper.title || 'PDF Reader';
 
             const pdfUrl = `/api/papers/${paperId}/pdf`;
-            readerState.pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
+            readerStatus.textContent = 'Downloading PDF';
+            readerState.pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
             updateReaderControls();
             await renderPdfPage(1);
             await loadReaderChunks(paperId);
         } catch (error) {
+            resetReaderState();
             readerTitle.textContent = 'PDF Reader';
             readerStatus.textContent = 'Failed to load PDF';
             readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
@@ -240,17 +350,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('readerBackBtn').addEventListener('click', () => {
         showView(readerState.returnView || 'search');
     });
-    document.getElementById('readerPrevBtn').addEventListener('click', () => queuePdfPage(readerState.pageNum - 1));
-    document.getElementById('readerNextBtn').addEventListener('click', () => queuePdfPage(readerState.pageNum + 1));
-    document.getElementById('readerZoomOutBtn').addEventListener('click', () => {
+    readerPrevBtn.addEventListener('click', () => queuePdfPage(readerState.pageNum - 1));
+    readerNextBtn.addEventListener('click', () => queuePdfPage(readerState.pageNum + 1));
+    readerZoomOutBtn.addEventListener('click', () => {
         readerState.scale = Math.max(0.6, readerState.scale - 0.2);
         queuePdfPage(readerState.pageNum);
     });
-    document.getElementById('readerZoomInBtn').addEventListener('click', () => {
+    readerZoomInBtn.addEventListener('click', () => {
         readerState.scale = Math.min(2.4, readerState.scale + 0.2);
         queuePdfPage(readerState.pageNum);
     });
     readerPageInput.addEventListener('change', () => queuePdfPage(Number(readerPageInput.value)));
+    readerPageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            readerPageInput.blur();
+            queuePdfPage(Number(readerPageInput.value));
+        }
+    });
+    updateReaderControls();
 
     // === 弹窗详情 ===
     const modal = document.getElementById('paperModal');
@@ -396,6 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('pdfTitle').value = '';
             document.getElementById('pdfAuthors').value = '';
             document.getElementById('pdfKeywords').value = '';
+            loadRecentPdfs();
         } catch (error) {
             alert('PDF 导入失败: ' + error.message);
         } finally {
@@ -709,5 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
     });
+
+    loadRecentPdfs();
 
 });

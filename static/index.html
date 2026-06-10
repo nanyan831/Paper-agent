@@ -86,6 +86,21 @@
                     <span>AI 正在浩瀚记忆中检索...</span>
                 </div>
 
+                <section class="recent-imports-panel" aria-labelledby="recentImportsTitle">
+                    <div class="section-headline">
+                        <div>
+                            <h3 id="recentImportsTitle">Recent PDF imports</h3>
+                            <p>Open newly imported papers without searching first.</p>
+                        </div>
+                        <button id="refreshRecentPdfsBtn" class="ghost-btn" title="Refresh recent imports">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </button>
+                    </div>
+                    <div id="recentPdfs" class="recent-pdf-list">
+                        <div class="recent-placeholder">Loading recent papers...</div>
+                    </div>
+                </section>
+
                 <div class="results-container" id="searchResults">
                     <!-- 结果将由 JS 动态渲染 -->
                     <div class="empty-state">

@@ -110,32 +110,42 @@ class DatabaseManager:
         params = []
 
         if source:
-            conditions.append("source = ?")
+            conditions.append("p.source = ?")
             params.append(source)
         if language:
-            conditions.append("language = ?")
+            conditions.append("p.language = ?")
             params.append(language)
         if favorited_only:
-            conditions.append("is_favorited = 1")
+            conditions.append("p.is_favorited = 1")
 
         where = " AND ".join(conditions) if conditions else "1=1"
-        allowed_sort = {"created_at", "publish_date", "citation_count", "title"}
-        sort_col = sort_by if sort_by in allowed_sort else "created_at"
+        allowed_sort = {
+            "created_at": "p.created_at",
+            "publish_date": "p.publish_date",
+            "citation_count": "p.citation_count",
+            "title": "p.title",
+        }
+        sort_col = allowed_sort.get(sort_by, "p.created_at")
         order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
         async with self._get_conn() as db:
             # 总数
             cursor = await db.execute(
-                f"SELECT COUNT(*) as cnt FROM papers WHERE {where}", params
+                f"SELECT COUNT(*) as cnt FROM papers p WHERE {where}", params
             )
             total = (await cursor.fetchone())["cnt"]
 
             # 分页数据
             cursor = await db.execute(
-                f"""SELECT id, title, authors, abstract, keywords, url, doi, source,
-                           publish_date, journal, language, citation_count,
-                           is_favorited, file_path, parse_status, created_at
-                    FROM papers WHERE {where}
+                f"""SELECT p.id, p.title, p.authors, p.abstract, p.keywords, p.url, p.doi, p.source,
+                           p.publish_date, p.journal, p.language, p.citation_count,
+                           p.is_favorited, p.file_path, p.parse_status, p.created_at,
+                           COUNT(c.id) as chunk_count,
+                           COALESCE(MAX(c.page_end), MAX(c.page_start), 0) as page_count
+                    FROM papers p
+                    LEFT JOIN paper_chunks c ON c.paper_id = p.id
+                    WHERE {where}
+                    GROUP BY p.id
                     ORDER BY {sort_col} {order}
                     LIMIT ? OFFSET ?""",
                 params + [limit, offset],
