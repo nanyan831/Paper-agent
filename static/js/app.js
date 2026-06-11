@@ -388,10 +388,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    window.openPdfReader = async (paperId) => {
+    window.openPdfReader = async (paperId, page = 1) => {
         if (window.event) window.event.stopPropagation();
         if (!window.pdfjsLib) {
             alert('PDF.js failed to load. Check your network connection.');
+            return;
+        }
+        const targetPage = Math.max(parseInt(page, 10) || 1, 1);
+        if (readerState.pdfDoc && readerState.paperId === paperId) {
+            showView('reader', false);
+            await queuePdfPage(targetPage);
             return;
         }
         readerState.returnView = document.querySelector('.view-section:not(.hidden)')?.id?.replace('view-', '') || 'search';
@@ -417,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             readerStatus.textContent = 'Downloading PDF';
             readerState.pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
             updateReaderControls();
-            await renderPdfPage(1);
+            await queuePdfPage(targetPage);
             await loadReaderChunks(paperId);
         } catch (error) {
             resetReaderState();
@@ -425,6 +431,12 @@ document.addEventListener('DOMContentLoaded', () => {
             readerStatus.textContent = 'Failed to load PDF';
             readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
         }
+    };
+
+    window.openPdfSource = async (paperId, page = 1) => {
+        if (!paperId) return;
+        closeChatPanel();
+        await window.openPdfReader(paperId, page);
     };
 
     document.getElementById('readerBackBtn').addEventListener('click', () => {
@@ -761,6 +773,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return html;
     }
 
+
+    function renderSourceCards(sources) {
+        if (!sources || !sources.length) return '';
+        const cards = sources.map((source, index) => {
+            const paperId = source.paper_id || '';
+            const pageStart = Number(source.page_start || source.page_end || 1);
+            const pageLabel = source.page_start
+                ? `p.${source.page_start}${source.page_end && source.page_end !== source.page_start ? `-${source.page_end}` : ''}`
+                : 'page unknown';
+            const canJump = Boolean(paperId);
+            return `
+                <button class="source-card${canJump ? '' : ' disabled'}" ${canJump ? `data-paper-id="${escapeHtmlGlobal(paperId)}" data-page="${pageStart}"` : 'disabled'}>
+                    <span class="source-index">${index + 1}</span>
+                    <span class="source-body">
+                        <strong>${escapeHtmlGlobal(source.title || 'Unknown paper')}</strong>
+                        <em>${escapeHtmlGlobal(pageLabel)}</em>
+                        ${source.snippet ? `<small>${escapeHtmlGlobal(source.snippet)}</small>` : ''}
+                    </span>
+                    ${canJump ? '<i class="fa-solid fa-arrow-up-right-from-square"></i>' : ''}
+                </button>`;
+        }).join('');
+        return `<div class="source-card-list">${cards}</div>`;
+    }
     // 滚动到底部
     function scrollToBottom() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -796,7 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (msg.content) {
                     // 正常的助手回复
                     bubble.classList.add('assistant-bubble');
-                    bubble.innerHTML = `<div class="bubble-content">${parseSimpleMarkdown(msg.content)}</div>`;
+                    bubble.innerHTML = `<div class="bubble-content">${parseSimpleMarkdown(msg.content)}${renderSourceCards(msg.sources)}</div>`;
                 } else {
                     return; // 防止空状态
                 }
@@ -815,6 +850,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 发送消息
+    chatHistory.addEventListener('click', (event) => {
+        const sourceBtn = event.target.closest('.source-card[data-paper-id]');
+        if (!sourceBtn) return;
+        event.preventDefault();
+        window.openPdfSource(sourceBtn.dataset.paperId, Number(sourceBtn.dataset.page || 1));
+    });
     async function loadChatSession() {
         if (!currentChatSessionId || currentChatMessages.length > 0) return;
         try {
