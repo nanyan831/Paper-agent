@@ -38,6 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchLoading = document.getElementById('searchLoading');
     const recentPdfs = document.getElementById('recentPdfs');
     const refreshRecentPdfsBtn = document.getElementById('refreshRecentPdfsBtn');
+    const evidenceInput = document.getElementById('evidenceInput');
+    const evidenceLookupBtn = document.getElementById('evidenceLookupBtn');
+    const evidenceResults = document.getElementById('evidenceResults');
 
     async function performSearch() {
         const query = searchInput.value.trim();
@@ -171,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
             recentPdfs.innerHTML = `
                 <div class="recent-placeholder">
                     <i class="fa-regular fa-file-pdf"></i>
-                    <span>No imported PDFs yet.</span>
+                    <span>还没有收录 PDF，先导入资料后再找出处。</span>
                 </div>`;
             return;
         }
@@ -182,15 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return `
                 <article class="recent-pdf-card">
                     <div class="recent-pdf-main">
-                        <h4 title="${escapeHtmlGlobal(paper.title)}">${escapeHtmlGlobal(paper.title || 'Untitled PDF')}</h4>
-                        <p>${escapeHtmlGlobal(paper.authors || 'Unknown authors')}</p>
+                        <h4 title="${escapeHtmlGlobal(paper.title)}">${escapeHtmlGlobal(paper.title || '未命名资料')}</h4>
+                        <p>${escapeHtmlGlobal(paper.authors || '未知作者')}</p>
                         <div class="recent-pdf-meta">
-                            ${pageCount ? `<span><i class="fa-regular fa-file-lines"></i> ${pageCount} pages</span>` : ''}
-                            <span><i class="fa-solid fa-layer-group"></i> ${chunkCount} chunks</span>
+                            ${pageCount ? `<span><i class="fa-regular fa-file-lines"></i> ${pageCount} 页</span>` : ''}
+                            <span><i class="fa-solid fa-layer-group"></i> ${chunkCount} 个片段</span>
                             <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlGlobal(paper.parse_status || 'unknown')}</span>
                         </div>
                     </div>
-                    <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="Open PDF">
+                    <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="打开原文">
                         <i class="fa-solid fa-book-open-reader"></i>
                     </button>
                 </article>`;
@@ -199,11 +202,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadRecentPdfs() {
         if (!recentPdfs) return;
-        recentPdfs.innerHTML = '<div class="recent-placeholder">Loading recent papers...</div>';
+        recentPdfs.innerHTML = '<div class="recent-placeholder">正在加载最近收录资料...</div>';
         try {
             const res = await fetch('/api/papers?source=local_pdf&limit=6');
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Failed to load recent PDFs');
+            if (!res.ok) throw new Error(data.detail || '加载最近收录失败');
             renderRecentPdfs(data.papers || []);
         } catch (error) {
             recentPdfs.innerHTML = `<div class="recent-placeholder error">${escapeHtmlGlobal(error.message)}</div>`;
@@ -212,6 +215,83 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (refreshRecentPdfsBtn) {
         refreshRecentPdfsBtn.addEventListener('click', loadRecentPdfs);
+    }
+
+    function renderEvidenceResults(papers) {
+        if (!evidenceResults) return;
+        const candidates = (papers || []).slice(0, 5);
+        evidenceResults.classList.remove('hidden');
+        if (!candidates.length) {
+            evidenceResults.innerHTML = `
+                <div class="evidence-empty">
+                    <i class="fa-regular fa-circle-question"></i>
+                    <span>本地资料库暂时没有找到可用出处，建议先导入相关 PDF。</span>
+                </div>`;
+            return;
+        }
+
+        evidenceResults.innerHTML = `
+            <div class="evidence-result-title">可能来源</div>
+            ${candidates.map((paper, index) => {
+                const hasPdf = Boolean(paper.file_path || paper.source === 'local_pdf' || paper.parse_status === 'full_text');
+                const paperId = paper.paper_id || paper.id;
+                const title = paper.title || paper.paper_title || paper.source_title || '未命名资料';
+                const abstract = paper.abstract || paper.snippet || paper.content || '暂无摘要，可打开原文继续核对。';
+                return `
+                    <article class="evidence-card">
+                        <div class="evidence-rank">${index + 1}</div>
+                        <div class="evidence-body">
+                            <h4 onclick="openPaperDetail('${escapeHtmlGlobal(paperId)}')">${escapeHtmlGlobal(title)}</h4>
+                            <p>${escapeHtmlGlobal(abstract)}</p>
+                            <div class="evidence-meta">
+                                ${paper.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(paper.authors)}</span>` : ''}
+                                <span><i class="fa-solid fa-database"></i> ${escapeHtmlGlobal(paper.source || 'local')}</span>
+                                ${paper.search_type ? `<span><i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(paper.search_type)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="evidence-actions">
+                            ${hasPdf ? `
+                                <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paperId)}')" title="打开原文">
+                                    <i class="fa-solid fa-book-open-reader"></i>
+                                </button>` : ''}
+                        </div>
+                    </article>`;
+            }).join('')}`;
+    }
+
+    async function lookupEvidence() {
+        if (!evidenceInput || !evidenceResults) return;
+        const query = evidenceInput.value.trim();
+        if (!query) return;
+
+        evidenceLookupBtn.disabled = true;
+        evidenceLookupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在找出处';
+        evidenceResults.classList.remove('hidden');
+        evidenceResults.innerHTML = '<div class="recent-placeholder">正在检索本地资料库...</div>';
+
+        try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=hybrid&top_k=8`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || '找出处失败');
+            renderEvidenceResults(data.results || []);
+        } catch (error) {
+            evidenceResults.innerHTML = `<div class="recent-placeholder error">${escapeHtmlGlobal(error.message)}</div>`;
+        } finally {
+            evidenceLookupBtn.disabled = false;
+            evidenceLookupBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass-location"></i> 查找出处';
+        }
+    }
+
+    if (evidenceLookupBtn) {
+        evidenceLookupBtn.addEventListener('click', lookupEvidence);
+    }
+    if (evidenceInput) {
+        evidenceInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                lookupEvidence();
+            }
+        });
     }
 
     function clearReaderCanvas() {
