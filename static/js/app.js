@@ -217,9 +217,41 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshRecentPdfsBtn.addEventListener('click', loadRecentPdfs);
     }
 
+    function parseSourcePage(value, fallback = 1) {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function truncateSourceText(value, maxChars = 260) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (text.length <= maxChars) return text;
+        return `${text.slice(0, maxChars).trim()}...`;
+    }
+
+    function normalizeSourceItem(source) {
+        const item = source || {};
+        const pageStart = parseSourcePage(item.page_start ?? item.page ?? item.pageStart ?? item.page_end, 1);
+        const pageEnd = Math.max(parseSourcePage(item.page_end, pageStart), pageStart);
+        const paperId = String(item.paper_id || item.paperId || '').trim();
+        const snippet = truncateSourceText(item.snippet || item.content || '', 260);
+        return {
+            paperId,
+            canJump: Boolean(paperId),
+            title: item.title || item.paper_title || item.source_title || '未命名资料',
+            pageStart,
+            pageEnd,
+            pageLabel: pageEnd !== pageStart ? `p.${pageStart}-${pageEnd}` : `p.${pageStart}`,
+            pageLabelZh: pageEnd !== pageStart ? `第 ${pageStart}-${pageEnd} 页` : `第 ${pageStart} 页`,
+            snippet,
+            authors: item.authors || '',
+            source: item.source || 'local_pdf',
+            searchType: item.search_type || ''
+        };
+    }
+
     function renderEvidenceResults(chunks) {
         if (!evidenceResults) return;
-        const candidates = (chunks || []).slice(0, 5);
+        const candidates = (chunks || []).slice(0, 5).map(normalizeSourceItem);
         evidenceResults.classList.remove('hidden');
         if (!candidates.length) {
             evidenceResults.innerHTML = `
@@ -232,33 +264,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         evidenceResults.innerHTML = `
             <div class="evidence-result-title">可能来源</div>
-            ${candidates.map((chunk, index) => {
-                const paperId = chunk.paper_id || chunk.id;
-                const title = chunk.title || chunk.paper_title || chunk.source_title || '未命名资料';
-                const pageStart = Number(chunk.page_start || 1);
-                const pageEnd = Number(chunk.page_end || pageStart);
-                const pageLabel = pageEnd && pageEnd !== pageStart ? `第 ${pageStart}-${pageEnd} 页` : `第 ${pageStart} 页`;
-                const snippet = chunk.snippet || chunk.content || '暂无原文片段，可打开原文继续核对。';
-                return `
-                    <article class="evidence-card">
-                        <div class="evidence-rank">${index + 1}</div>
-                        <div class="evidence-body">
-                            <h4 onclick="openPdfSource('${escapeHtmlGlobal(paperId)}', ${pageStart})">${escapeHtmlGlobal(title)}</h4>
-                            <p>${escapeHtmlGlobal(snippet)}</p>
-                            <div class="evidence-meta">
-                                ${chunk.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(chunk.authors)}</span>` : ''}
-                                <span><i class="fa-solid fa-file-lines"></i> ${escapeHtmlGlobal(pageLabel)}</span>
-                                <span><i class="fa-solid fa-database"></i> ${escapeHtmlGlobal(chunk.source || 'local_pdf')}</span>
-                                ${chunk.search_type ? `<span><i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(chunk.search_type)}</span>` : ''}
-                            </div>
+            ${candidates.map((source, index) => `
+                <article class="evidence-card${source.canJump ? ' has-jump' : ''}">
+                    <div class="evidence-rank">${index + 1}</div>
+                    <div class="evidence-body">
+                        <h4 class="${source.canJump ? 'jumpable' : 'disabled'}" ${source.canJump ? `onclick="openPdfSource('${escapeHtmlGlobal(source.paperId)}', ${source.pageStart})"` : ''}>${escapeHtmlGlobal(source.title)}</h4>
+                        <p>${escapeHtmlGlobal(source.snippet || '暂无原文片段，可打开原文继续核对。')}</p>
+                        <div class="evidence-meta">
+                            ${source.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(source.authors)}</span>` : ''}
+                            <span><i class="fa-solid fa-file-lines"></i> ${escapeHtmlGlobal(source.pageLabelZh)}</span>
+                            <span><i class="fa-solid fa-database"></i> ${escapeHtmlGlobal(source.source)}</span>
+                            ${source.searchType ? `<span><i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(source.searchType)}</span>` : ''}
                         </div>
-                        <div class="evidence-actions">
-                            <button class="reader-open-btn" onclick="openPdfSource('${escapeHtmlGlobal(paperId)}', ${pageStart})" title="打开原文页">
+                    </div>
+                    <div class="evidence-actions">
+                        ${source.canJump ? `
+                            <button class="reader-open-btn" onclick="openPdfSource('${escapeHtmlGlobal(source.paperId)}', ${source.pageStart})" title="打开原文页">
                                 <i class="fa-solid fa-book-open-reader"></i>
-                            </button>
-                        </div>
-                    </article>`;
-            }).join('')}`;
+                            </button>` : ''}
+                    </div>
+                </article>`).join('')}`;
     }
 
     async function lookupEvidence() {
@@ -435,9 +460,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.openPdfSource = async (paperId, page = 1) => {
+    window.openPdfSource = async (paperId, page = 1, options = {}) => {
         if (!paperId) return;
-        closeChatPanel();
+        if (options.closeChat) closeChatPanel();
         await window.openPdfReader(paperId, page);
     };
 
@@ -796,26 +821,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSourceCards(sources) {
         if (!sources || !sources.length) return '';
         const cards = sources.map((source, index) => {
-            const paperId = source.paper_id || '';
-            const pageStart = Number(source.page_start || source.page_end || 1);
-            const pageLabel = source.page_start
-                ? `p.${source.page_start}${source.page_end && source.page_end !== source.page_start ? `-${source.page_end}` : ''}`
-                : 'page unknown';
-            const canJump = Boolean(paperId);
+            const item = normalizeSourceItem(source);
             return `
-                <button class="source-card${canJump ? '' : ' disabled'}" ${canJump ? `data-paper-id="${escapeHtmlGlobal(paperId)}" data-page="${pageStart}"` : 'disabled'}>
+                <button class="source-card${item.canJump ? '' : ' disabled'}" ${item.canJump ? `data-paper-id="${escapeHtmlGlobal(item.paperId)}" data-page="${item.pageStart}"` : 'disabled'}>
                     <span class="source-index">${index + 1}</span>
                     <span class="source-body">
-                        <strong>${escapeHtmlGlobal(source.title || 'Unknown paper')}</strong>
-                        <em>${escapeHtmlGlobal(pageLabel)}</em>
-                        ${source.snippet ? `<small>${escapeHtmlGlobal(source.snippet)}</small>` : ''}
+                        <strong>${escapeHtmlGlobal(item.title)}</strong>
+                        <em>${escapeHtmlGlobal(item.pageLabel)}</em>
+                        ${item.snippet ? `<small>${escapeHtmlGlobal(item.snippet)}</small>` : ''}
                     </span>
-                    ${canJump ? '<i class="fa-solid fa-arrow-up-right-from-square"></i>' : ''}
+                    ${item.canJump ? '<i class="fa-solid fa-arrow-up-right-from-square"></i>' : ''}
                 </button>`;
         }).join('');
         return `<div class="source-card-list">${cards}</div>`;
     }
-    // 滚动到底部
+
     function scrollToBottom() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
@@ -873,7 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sourceBtn = event.target.closest('.source-card[data-paper-id]');
         if (!sourceBtn) return;
         event.preventDefault();
-        window.openPdfSource(sourceBtn.dataset.paperId, Number(sourceBtn.dataset.page || 1));
+        window.openPdfSource(sourceBtn.dataset.paperId, Number(sourceBtn.dataset.page || 1), { closeChat: true });
     });
     async function loadChatSession() {
         if (!currentChatSessionId || currentChatMessages.length > 0) return;

@@ -341,6 +341,12 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.025);
+    transition: var(--transition);
+}
+
+.evidence-card.has-jump:hover {
+    border-color: var(--border-focus);
+    background: rgba(99, 102, 241, 0.08);
 }
 
 .evidence-rank {
@@ -364,11 +370,18 @@ body {
     font-size: 15px;
     line-height: 1.35;
     margin: 0 0 5px;
+}
+
+.evidence-body h4.jumpable {
     cursor: pointer;
 }
 
-.evidence-body h4:hover {
+.evidence-body h4.jumpable:hover {
     color: var(--accent-primary);
+}
+
+.evidence-body h4.disabled {
+    cursor: default;
 }
 
 .evidence-body p {
@@ -1354,7 +1367,7 @@ body {
     transition: var(--transition);
 }
 
-.source-card:hover {
+.source-card:not(.disabled):hover {
     border-color: var(--border-focus);
     background: rgba(99, 102, 241, 0.13);
 }
@@ -1401,6 +1414,7 @@ body {
     font-size: 12px;
     line-height: 1.45;
 }
+
 .tool-content {
     background: rgba(255, 255, 255, 0.03);
     border: 1px dashed var(--border-color);
