@@ -217,9 +217,9 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshRecentPdfsBtn.addEventListener('click', loadRecentPdfs);
     }
 
-    function renderEvidenceResults(papers) {
+    function renderEvidenceResults(chunks) {
         if (!evidenceResults) return;
-        const candidates = (papers || []).slice(0, 5);
+        const candidates = (chunks || []).slice(0, 5);
         evidenceResults.classList.remove('hidden');
         if (!candidates.length) {
             evidenceResults.innerHTML = `
@@ -232,28 +232,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         evidenceResults.innerHTML = `
             <div class="evidence-result-title">可能来源</div>
-            ${candidates.map((paper, index) => {
-                const hasPdf = Boolean(paper.file_path || paper.source === 'local_pdf' || paper.parse_status === 'full_text');
-                const paperId = paper.paper_id || paper.id;
-                const title = paper.title || paper.paper_title || paper.source_title || '未命名资料';
-                const abstract = paper.abstract || paper.snippet || paper.content || '暂无摘要，可打开原文继续核对。';
+            ${candidates.map((chunk, index) => {
+                const paperId = chunk.paper_id || chunk.id;
+                const title = chunk.title || chunk.paper_title || chunk.source_title || '未命名资料';
+                const pageStart = Number(chunk.page_start || 1);
+                const pageEnd = Number(chunk.page_end || pageStart);
+                const pageLabel = pageEnd && pageEnd !== pageStart ? `第 ${pageStart}-${pageEnd} 页` : `第 ${pageStart} 页`;
+                const snippet = chunk.snippet || chunk.content || '暂无原文片段，可打开原文继续核对。';
                 return `
                     <article class="evidence-card">
                         <div class="evidence-rank">${index + 1}</div>
                         <div class="evidence-body">
-                            <h4 onclick="openPaperDetail('${escapeHtmlGlobal(paperId)}')">${escapeHtmlGlobal(title)}</h4>
-                            <p>${escapeHtmlGlobal(abstract)}</p>
+                            <h4 onclick="openPdfSource('${escapeHtmlGlobal(paperId)}', ${pageStart})">${escapeHtmlGlobal(title)}</h4>
+                            <p>${escapeHtmlGlobal(snippet)}</p>
                             <div class="evidence-meta">
-                                ${paper.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(paper.authors)}</span>` : ''}
-                                <span><i class="fa-solid fa-database"></i> ${escapeHtmlGlobal(paper.source || 'local')}</span>
-                                ${paper.search_type ? `<span><i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(paper.search_type)}</span>` : ''}
+                                ${chunk.authors ? `<span><i class="fa-solid fa-users"></i> ${escapeHtmlGlobal(chunk.authors)}</span>` : ''}
+                                <span><i class="fa-solid fa-file-lines"></i> ${escapeHtmlGlobal(pageLabel)}</span>
+                                <span><i class="fa-solid fa-database"></i> ${escapeHtmlGlobal(chunk.source || 'local_pdf')}</span>
+                                ${chunk.search_type ? `<span><i class="fa-solid fa-bolt"></i> ${escapeHtmlGlobal(chunk.search_type)}</span>` : ''}
                             </div>
                         </div>
                         <div class="evidence-actions">
-                            ${hasPdf ? `
-                                <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paperId)}')" title="打开原文">
-                                    <i class="fa-solid fa-book-open-reader"></i>
-                                </button>` : ''}
+                            <button class="reader-open-btn" onclick="openPdfSource('${escapeHtmlGlobal(paperId)}', ${pageStart})" title="打开原文页">
+                                <i class="fa-solid fa-book-open-reader"></i>
+                            </button>
                         </div>
                     </article>`;
             }).join('')}`;
@@ -270,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         evidenceResults.innerHTML = '<div class="recent-placeholder">正在检索本地资料库...</div>';
 
         try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=hybrid&top_k=8`);
+            const res = await fetch(`/api/search/chunks?q=${encodeURIComponent(query)}&search_type=hybrid&top_k=8`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || '找出处失败');
             renderEvidenceResults(data.results || []);
