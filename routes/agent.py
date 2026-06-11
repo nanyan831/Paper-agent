@@ -51,7 +51,26 @@ def _message_to_display(row: dict) -> dict:
     }
     if row.get("tool_name"):
         message["name"] = row["tool_name"]
+    metadata = _parse_metadata(row.get("metadata"))
+    if metadata.get("sources"):
+        message["sources"] = metadata["sources"]
     return message
+
+
+def _parse_metadata(raw_metadata: Optional[str]) -> dict:
+    if not raw_metadata:
+        return {}
+    try:
+        return json.loads(raw_metadata)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _latest_assistant_sources(display_messages: list[dict]) -> list[dict]:
+    for message in reversed(display_messages):
+        if message.get("role") == "assistant":
+            return message.get("sources") or []
+    return []
 
 
 def _extract_user_text(req: ChatRequest) -> str:
@@ -131,6 +150,17 @@ def _short_snippet(text: str, max_chars: int = 220) -> str:
     return snippet[:max_chars].rstrip() + "..."
 
 
+def _normalize_source(hit: dict) -> dict:
+    return {
+        "paper_id": hit.get("paper_id"),
+        "title": hit.get("title") or "未知论文",
+        "page_start": hit.get("page_start"),
+        "page_end": hit.get("page_end"),
+        "snippet": _short_snippet(hit.get("snippet") or hit.get("content") or ""),
+        "chunk_id": hit.get("chunk_id") or hit.get("id"),
+    }
+
+
 def _format_page_range(hit: dict) -> str:
     start = hit.get("page_start")
     end = hit.get("page_end")
@@ -176,12 +206,12 @@ def _extract_rag_hits(messages: list[dict]) -> tuple[bool, list[dict]]:
     return searched_chunks, hits
 
 
-def _build_sources_block(rag_hits: list[dict], max_sources: int = 4) -> str:
+def _build_sources_block(sources: list[dict], max_sources: int = 4) -> str:
     lines = ["", "", "本地引用来源："]
-    for index, hit in enumerate(rag_hits[:max_sources], start=1):
-        title = hit.get("title") or "未知论文"
-        page_range = _format_page_range(hit)
-        snippet = _short_snippet(hit.get("snippet") or hit.get("content") or "")
+    for index, source in enumerate(sources[:max_sources], start=1):
+        title = source.get("title") or "未知论文"
+        page_range = _format_page_range(source)
+        snippet = source.get("snippet") or ""
         if snippet:
             lines.append(f"{index}. 《{title}》，{page_range}：{snippet}")
         else:
@@ -189,10 +219,10 @@ def _build_sources_block(rag_hits: list[dict], max_sources: int = 4) -> str:
     return "\n".join(lines)
 
 
-def _append_rag_sources_to_final_answer(messages: list[dict]) -> None:
+def _apply_evidence_policy(messages: list[dict]) -> list[dict]:
     searched_chunks, rag_hits = _extract_rag_hits(messages)
     if not searched_chunks:
-        return
+        return []
 
     final_answer = None
     for msg in reversed(messages):
@@ -200,28 +230,34 @@ def _append_rag_sources_to_final_answer(messages: list[dict]) -> None:
             final_answer = msg
             break
     if final_answer is None:
-        return
+        return []
 
     content = final_answer.get("content") or ""
+    sources = [_normalize_source(hit) for hit in rag_hits]
     if rag_hits:
         if "本地引用来源：" not in content:
-            final_answer["content"] = content.rstrip() + _build_sources_block(rag_hits)
+            final_answer["content"] = content.rstrip() + _build_sources_block(sources)
+        final_answer["sources"] = sources[:4]
     elif "本地论文库没有找到可引用依据" not in content:
         final_answer["content"] = (
-            content.rstrip()
-            + "\n\n本地论文库没有找到可引用依据；以上内容不能视为基于本地全文的结论。"
+            "本地论文库没有找到可引用依据，因此我不能给出确定结论。"
+            "请先导入相关 PDF，或换一个更贴近本地论文内容的问题。"
         )
+        final_answer["sources"] = []
+    return sources[:4]
 
 
 async def _persist_agent_result(session_id: str, result_messages: list[dict], context_len: int) -> None:
     new_messages = result_messages[context_len:]
-    _append_rag_sources_to_final_answer(new_messages)
+    _apply_evidence_policy(new_messages)
     for msg in new_messages:
         role = msg.get("role")
         if role == "assistant":
             content = msg.get("content") or ""
             tool_names = _assistant_tool_names(msg)
             metadata = {"tool_calls": msg.get("tool_calls") or []}
+            if "sources" in msg:
+                metadata["sources"] = msg["sources"]
             if content:
                 await db_manager.add_chat_message(session_id, "assistant", content, metadata=metadata)
             elif tool_names:
@@ -260,7 +296,12 @@ async def get_chat_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
     rows = await db_manager.list_chat_messages(session_id, limit=DISPLAY_MESSAGE_LIMIT)
-    return {"session_id": session_id, "messages": [_message_to_display(row) for row in rows]}
+    display_messages = [_message_to_display(row) for row in rows]
+    return {
+        "session_id": session_id,
+        "messages": display_messages,
+        "sources": _latest_assistant_sources(display_messages),
+    }
 
 
 @router.post("/chat")
@@ -307,8 +348,10 @@ async def chat_with_deepseek(req: ChatRequest):
     await _refresh_summary_if_needed(session_id)
 
     rows = await db_manager.list_chat_messages(session_id, limit=DISPLAY_MESSAGE_LIMIT)
+    display_messages = [_message_to_display(row) for row in rows]
     return {
         "session_id": session_id,
-        "messages": [_message_to_display(row) for row in rows],
+        "messages": display_messages,
+        "sources": _latest_assistant_sources(display_messages),
         "usage": usage,
     }
