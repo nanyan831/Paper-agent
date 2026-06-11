@@ -9,6 +9,68 @@ from rag.pdf_processor import extract_pdf_pages, chunk_pdf_pages, build_pdf_pape
 
 router = APIRouter(prefix="/api/papers", tags=["Papers"])
 
+
+async def _import_pdf_upload(
+    request: Request,
+    file: UploadFile,
+    title: Optional[str] = None,
+    authors: str = "",
+    abstract: str = "",
+    keywords: str = "",
+) -> dict:
+    filename = file.filename or "unnamed.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    db = request.app.state.db
+    vs = request.app.state.vector_store
+
+    paper_id = str(uuid.uuid4())
+    file_path = PDF_DIR / f"{paper_id}.pdf"
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded PDF is empty")
+    file_path.write_bytes(content)
+
+    try:
+        pages = extract_pdf_pages(file_path)
+    except Exception as e:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {e}")
+
+    full_text = "\n\n".join(page["text"] for page in pages)
+    resolved_title = title or Path(filename).stem
+    paper = build_pdf_paper(
+        title=resolved_title,
+        authors=authors,
+        abstract=abstract,
+        keywords=keywords,
+        file_path=str(file_path),
+        full_text=full_text,
+    )
+    paper["id"] = paper_id
+
+    saved_id = await db.add_paper(paper)
+    if not saved_id:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="Paper already exists or could not be inserted")
+
+    chunks = chunk_pdf_pages(saved_id, pages) if pages else []
+    if chunks:
+        await db.replace_paper_chunks(saved_id, chunks)
+        vs.add_chunks_batch(chunks)
+
+    return {
+        "success": True,
+        "filename": filename,
+        "paper_id": saved_id,
+        "title": resolved_title,
+        "parse_status": paper["parse_status"],
+        "pages": len(pages),
+        "chunks": len(chunks),
+    }
+
 @router.get("")
 async def list_papers(
     request: Request,
@@ -37,56 +99,59 @@ async def upload_pdf_paper(
     abstract: str = Form(""),
     keywords: str = Form("")
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-
-    db = request.app.state.db
-    vs = request.app.state.vector_store
-
-    paper_id = str(uuid.uuid4())
-    safe_name = f"{paper_id}.pdf"
-    file_path = PDF_DIR / safe_name
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded PDF is empty")
-    file_path.write_bytes(content)
-
-    try:
-        pages = extract_pdf_pages(file_path)
-    except Exception as e:
-        file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {e}")
-
-    full_text = "\n\n".join(page["text"] for page in pages)
-    resolved_title = title or Path(file.filename).stem
-    paper = build_pdf_paper(
-        title=resolved_title,
+    return await _import_pdf_upload(
+        request,
+        file,
+        title=title,
         authors=authors,
         abstract=abstract,
         keywords=keywords,
-        file_path=str(file_path),
-        full_text=full_text,
     )
-    paper["id"] = paper_id
 
-    saved_id = await db.add_paper(paper)
-    if not saved_id:
-        file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="Paper already exists or could not be inserted")
 
-    chunks = chunk_pdf_pages(saved_id, pages) if pages else []
-    if chunks:
-        await db.replace_paper_chunks(saved_id, chunks)
-        vs.add_chunks_batch(chunks)
+@router.post("/upload-pdfs")
+async def upload_pdf_papers(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    title: Optional[str] = Form(None),
+    authors: str = Form(""),
+    abstract: str = Form(""),
+    keywords: str = Form("")
+):
+    results = []
+    for file in files:
+        filename = file.filename or "unnamed.pdf"
+        try:
+            result = await _import_pdf_upload(
+                request,
+                file,
+                title=title if len(files) == 1 else None,
+                authors=authors,
+                abstract=abstract,
+                keywords=keywords,
+            )
+            results.append(result)
+        except HTTPException as e:
+            results.append({
+                "success": False,
+                "filename": filename,
+                "error": str(e.detail),
+            })
+        except Exception as e:
+            results.append({
+                "success": False,
+                "filename": filename,
+                "error": f"Unexpected import error: {e}",
+            })
 
+    succeeded = sum(1 for item in results if item.get("success"))
+    failed = len(results) - succeeded
     return {
-        "success": True,
-        "paper_id": saved_id,
-        "title": resolved_title,
-        "parse_status": paper["parse_status"],
-        "pages": len(pages),
-        "chunks": len(chunks),
+        "success": failed == 0,
+        "total": len(results),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
     }
 
 

@@ -229,8 +229,9 @@
                     <div class="control-card">
                         <h3>导入本地 PDF</h3>
                         <div class="form-group">
-                            <label>PDF 文件</label>
-                            <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+                            <label>PDF 文件（可多选）</label>
+                            <input type="file" id="pdfFile" accept="application/pdf,.pdf" multiple>
+                            <small>支持一次导入多篇论文，系统会逐个返回成功或失败原因。</small>
                         </div>
                         <div class="form-group">
                             <label>标题（可选）</label>

@@ -571,36 +571,53 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileInput = document.getElementById('pdfFile');
         const btn = document.getElementById('uploadPdfBtn');
         const logsDiv = document.getElementById('crawlLogs');
-        const file = fileInput.files[0];
+        const files = Array.from(fileInput.files || []);
 
-        if (!file) {
+        if (!files.length) {
             alert('请选择 PDF 文件');
             return;
         }
 
         const formData = new FormData();
-        formData.append('file', file);
+        files.forEach(file => formData.append('files', file));
         formData.append('title', document.getElementById('pdfTitle').value.trim());
         formData.append('authors', document.getElementById('pdfAuthors').value.trim());
         formData.append('keywords', document.getElementById('pdfKeywords').value.trim());
 
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在解析...';
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 正在导入 ${files.length} 篇...`;
 
         try {
-            const res = await fetch('/api/papers/upload-pdf', {
+            const res = await fetch('/api/papers/upload-pdfs', {
                 method: 'POST',
                 body: formData
             });
             const data = await res.json();
             if (!res.ok) {
-                throw new Error(data.detail || '上传失败');
+                throw new Error(data.detail || '导入失败');
             }
 
+            const resultRows = (data.results || []).map(item => `
+                <div class="import-result-item ${item.success ? 'success' : 'failed'}">
+                    <div>
+                        <strong>${escapeHtmlGlobal(item.title || item.filename || '未命名 PDF')}</strong>
+                        <p>${item.success
+                            ? `页数：${item.pages} · 全文片段：${item.chunks} · 状态：${escapeHtmlGlobal(item.parse_status || 'unknown')}`
+                            : `失败原因：${escapeHtmlGlobal(item.error || '未知错误')}`}</p>
+                    </div>
+                    ${item.success ? `<button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(item.paper_id)}')" title="打开原文"><i class="fa-solid fa-book-open-reader"></i></button>` : ''}
+                </div>
+            `).join('');
+
             logsDiv.innerHTML = `
-                <div style="padding: 16px; background: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; border-radius: 4px; margin-top: 20px;">
-                    <p style="color: #10b981;"><i class="fa-solid fa-check-circle"></i> PDF 已导入：${data.title}</p>
-                    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">页数：${data.pages}，全文块：${data.chunks}，状态：${data.parse_status}</p>
+                <div class="import-result-card">
+                    <div class="import-result-summary">
+                        <span><i class="fa-solid fa-file-import"></i> 批量导入完成</span>
+                        <small>成功 ${data.succeeded || 0} 篇，失败 ${data.failed || 0} 篇</small>
+                    </div>
+                    <div class="import-result-list">
+                        ${resultRows || '<p class="recent-placeholder">没有返回导入结果。</p>'}
+                    </div>
                 </div>
             ` + logsDiv.innerHTML;
 
