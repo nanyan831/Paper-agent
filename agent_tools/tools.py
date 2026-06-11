@@ -58,6 +58,7 @@ def _slim_chunk_result(chunk: dict) -> dict:
         "doi": chunk.get("doi"),
         "url": chunk.get("url"),
         "section": chunk.get("section"),
+        "chunk_index": chunk.get("chunk_index"),
         "page_start": chunk.get("page_start"),
         "page_end": chunk.get("page_end"),
         "search_score": chunk.get("search_score"),

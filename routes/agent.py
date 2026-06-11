@@ -14,12 +14,15 @@ db_manager = DatabaseManager()
 RECENT_CONTEXT_MESSAGES = 10
 DISPLAY_MESSAGE_LIMIT = 200
 SUMMARY_MESSAGE_THRESHOLD = 16
+MIN_CONFIDENT_SOURCE_COUNT = 2
+LOW_SCORE_THRESHOLD = 0.005
 
 SYSTEM_PROMPT = (
     "你是一个智能学术助手。回答论文内容、方法、结论、证据时，必须优先调用 search_chunks "
     "检索本地全文片段；如果本地全文不足，再调用 search_papers 查询论文摘要和元数据。"
     "使用 search_chunks 后，最终回答必须尽量附上可追溯来源，至少包含论文名、页码范围和原文片段。"
     "如果本地论文库没有检索到相关全文证据，要明确说明“本地论文库没有找到可引用依据”，不要编造来源。"
+    "如果检索证据很少或相关性较弱，只能把回答表述为线索或可能解释，不能给确定结论。"
     "回答要简洁、专业，并区分依据来自全文片段还是摘要元数据。"
 )
 
@@ -151,6 +154,15 @@ def _short_snippet(text: str, max_chars: int = 220) -> str:
 
 
 def _normalize_source(hit: dict) -> dict:
+    search_score = hit.get("search_score")
+    search_type = hit.get("search_type")
+    chunk_index = hit.get("chunk_index")
+    evidence = {
+        "search_score": search_score,
+        "search_type": search_type,
+        "chunk_index": chunk_index,
+        "confidence": _evidence_confidence(search_score, search_type),
+    }
     return {
         "paper_id": hit.get("paper_id"),
         "title": hit.get("title") or "未知论文",
@@ -158,7 +170,31 @@ def _normalize_source(hit: dict) -> dict:
         "page_end": hit.get("page_end"),
         "snippet": _short_snippet(hit.get("snippet") or hit.get("content") or ""),
         "chunk_id": hit.get("chunk_id") or hit.get("id"),
+        "search_score": search_score,
+        "search_type": search_type,
+        "chunk_index": chunk_index,
+        "evidence": evidence,
     }
+
+
+def _evidence_confidence(search_score: Any, search_type: Optional[str]) -> str:
+    if search_score is None:
+        return "unknown"
+    try:
+        score = float(search_score)
+    except (TypeError, ValueError):
+        return "unknown"
+    if score <= 0:
+        return "low"
+    if (search_type or "").startswith("hybrid") and score < LOW_SCORE_THRESHOLD:
+        return "low"
+    return "medium"
+
+
+def _has_weak_evidence(sources: list[dict]) -> bool:
+    if len(sources) < MIN_CONFIDENT_SOURCE_COUNT:
+        return True
+    return any((source.get("evidence") or {}).get("confidence") == "low" for source in sources)
 
 
 def _format_page_range(hit: dict) -> str:
@@ -219,6 +255,14 @@ def _build_sources_block(sources: list[dict], max_sources: int = 4) -> str:
     return "\n".join(lines)
 
 
+def _prepend_weak_evidence_notice(content: str) -> str:
+    notice = "证据不足，只能作为线索："
+    stripped = content.lstrip()
+    if stripped.startswith(notice) or "证据不足，只能作为线索" in stripped[:80]:
+        return content
+    return f"{notice}{stripped}"
+
+
 def _apply_evidence_policy(messages: list[dict]) -> list[dict]:
     searched_chunks, rag_hits = _extract_rag_hits(messages)
     if not searched_chunks:
@@ -235,8 +279,12 @@ def _apply_evidence_policy(messages: list[dict]) -> list[dict]:
     content = final_answer.get("content") or ""
     sources = [_normalize_source(hit) for hit in rag_hits]
     if rag_hits:
+        if _has_weak_evidence(sources):
+            content = _prepend_weak_evidence_notice(content)
         if "本地引用来源：" not in content:
             final_answer["content"] = content.rstrip() + _build_sources_block(sources)
+        else:
+            final_answer["content"] = content
         final_answer["sources"] = sources[:4]
     elif "本地论文库没有找到可引用依据" not in content:
         final_answer["content"] = (
