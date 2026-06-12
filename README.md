@@ -8,7 +8,9 @@ Paper Agent 是一个本地论文记忆库和 RAG 学术助手。它可以抓取
 - PDF 导入：支持单篇或批量上传本地 PDF，自动抽取文本、切块、写入本地数据库和向量库。
 - 找出处 / 查证据：输入一句观点或问题，直接检索本地 PDF chunk，返回可能来源、页码和原文片段。
 - RAG 问答：AI 对话优先检索本地论文全文切块，并返回结构化来源。
-- PDF 原文跳转：点击 AI 来源或找出处结果，可打开 PDF 查看器并跳到对应页。
+- AI 对话体验：支持 Markdown 样式渲染，最新回答会在网页端逐字生成，用户向上阅读时不会被强制拉到底部。
+- PDF 原文跳转：点击 AI 来源、找出处结果或阅读器内证据卡片，可打开 PDF 查看器并跳到对应页。
+- PDF 阅读器：支持页码跳转、缩放、左右对照翻译、阅读器内查出处；底层 chunk 继续用于 RAG，但不直接展示给普通用户。
 - 聊天记录：完整聊天记录保存在本地 SQLite，模型上下文只发送摘要和最近几轮，降低 token 消耗。
 - 爬虫调度：支持 arXiv、Semantic Scholar、CrossRef 等来源的文献抓取入口。
 
@@ -119,6 +121,12 @@ RAG 可以降低大模型幻觉吗？这个结论出自哪篇论文？
 
 左下角有 AI 对话按钮。
 
+AI 回答会按网页阅读体验展示：
+
+- Markdown 会渲染成标题、列表、引用、代码块、加粗等样式。
+- 最新一条助手回答会逐字生成。
+- 如果用户正在向上查看历史消息，页面不会强制自动滚到底部。
+
 现在聊天记录分两层：
 
 - 完整聊天记录：保存在本地数据库，刷新页面后可以恢复。
@@ -161,8 +169,10 @@ AI 回答论文细节时会优先调用 `search_chunks` 检索本地全文片段
 - 上一页 / 下一页
 - 页码输入
 - 缩放
-- 右侧 chunk 列表
 - 点击来源跳转到 `page_start`
+- 左右对照翻译：可翻译当前页文本，也可以粘贴指定段落翻译。
+- 阅读器内查出处：可在当前论文或全部资料库中检索证据。
+- 底层 chunk 隐藏：用户阅读时不直接看 chunk 列表，但 RAG、找出处、引用跳转仍然使用这些切块数据。
 
 ## RAG 数据结构
 
@@ -278,6 +288,18 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/search/chunks?q=Autoregressive%20Re
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\verify_evidence_flow.py
+```
+
+PDF 来源跳转自测：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_pdf_source_jump.py --api-url http://127.0.0.1:8000
+```
+
+阅读器翻译接口会调用 DeepSeek，测试时会消耗少量 token：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/translate" -Method Post -ContentType "application/json" -Body '{"text":"Retrieval augmented generation improves answer grounding.","target_language":"zh-CN"}'
 ```
 
 详细说明见：
