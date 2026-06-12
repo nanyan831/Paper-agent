@@ -14,7 +14,7 @@ from crawlers.manager import CrawlerManager
 from agent_tools.tools import init_tools_dependencies
 from scheduler.jobs import start_scheduler, stop_scheduler
 
-from routes import search_router, papers_router, crawler_router, agent_router, stats_router
+from routes import search_router, papers_router, crawler_router, agent_router, stats_router, translate_router
 
 # 配置日志
 logging.basicConfig(
@@ -76,6 +76,7 @@ app.include_router(papers_router)
 app.include_router(crawler_router)
 app.include_router(agent_router)
 app.include_router(stats_router)
+app.include_router(translate_router)
 
 # 挂载静态文件 (前端)
 import os

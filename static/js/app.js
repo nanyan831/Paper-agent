@@ -127,6 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
         rendering: false,
         renderError: null,
         pendingPage: null,
+        chunks: [],
+        pageTextCache: {},
+        lastTranslateSource: '',
         returnView: 'search'
     };
 
@@ -136,6 +139,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const readerPageCount = document.getElementById('readerPageCount');
     const readerChunks = document.getElementById('readerChunks');
     const pdfCanvas = document.getElementById('pdfCanvas');
+    const readerEvidenceInput = document.getElementById('readerEvidenceInput');
+    const readerEvidenceBtn = document.getElementById('readerEvidenceBtn');
+    const readerEvidenceResults = document.getElementById('readerEvidenceResults');
+    const readerTranslateSource = document.getElementById('readerTranslateSource');
+    const readerTranslateResult = document.getElementById('readerTranslateResult');
+    const readerTranslateBtn = document.getElementById('readerTranslateBtn');
+    const readerRetryTranslateBtn = document.getElementById('readerRetryTranslateBtn');
+    const readerTranslateStatus = document.getElementById('readerTranslateStatus');
+    const readerUsePageTextBtn = document.getElementById('readerUsePageTextBtn');
     const readerPrevBtn = document.getElementById('readerPrevBtn');
     const readerNextBtn = document.getElementById('readerNextBtn');
     const readerZoomOutBtn = document.getElementById('readerZoomOutBtn');
@@ -329,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function highlightReaderChunks() {
+        if (!readerChunks) return;
         readerChunks.querySelectorAll('.reader-chunk').forEach(btn => {
             const start = Number(btn.dataset.pageStart || btn.dataset.page || 1);
             const end = Number(btn.dataset.pageEnd || start);
@@ -345,8 +358,170 @@ document.addEventListener('DOMContentLoaded', () => {
         readerState.rendering = false;
         readerState.renderError = null;
         readerState.pendingPage = null;
+        readerState.chunks = [];
+        readerState.pageTextCache = {};
         clearReaderCanvas();
         updateReaderControls();
+        resetReaderEvidence();
+        resetReaderTranslation();
+    }
+
+    function resetReaderEvidence() {
+        if (readerEvidenceInput) readerEvidenceInput.value = '';
+        if (readerEvidenceResults) {
+            readerEvidenceResults.innerHTML = '<p class="reader-empty">输入观点后，结果会显示原文片段和页码。</p>';
+        }
+        if (readerEvidenceBtn) {
+            readerEvidenceBtn.disabled = false;
+            readerEvidenceBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass-location"></i> 查找证据';
+        }
+        const currentScope = document.querySelector('input[name="readerEvidenceScope"][value="current"]');
+        if (currentScope) currentScope.checked = true;
+    }
+
+    function renderReaderEvidenceResults(items) {
+        if (!readerEvidenceResults) return;
+        const sources = (items || []).slice(0, 8).map(normalizeSourceItem);
+        if (!sources.length) {
+            readerEvidenceResults.innerHTML = '<p class="reader-empty">没有找到可用证据。可以切换到“全部资料库”再试。</p>';
+            return;
+        }
+
+        readerEvidenceResults.innerHTML = sources.map((source, index) => {
+            const isCurrentPaper = source.paperId && source.paperId === readerState.paperId;
+            const jumpLabel = isCurrentPaper ? '跳到本页' : '打开原文';
+            return `
+                <button class="reader-evidence-card" data-paper-id="${escapeHtmlGlobal(source.paperId)}" data-page="${source.pageStart}" ${source.canJump ? '' : 'disabled'}>
+                    <span class="reader-evidence-rank">${index + 1}</span>
+                    <span class="reader-evidence-body">
+                        <strong>${escapeHtmlGlobal(source.title)}</strong>
+                        <em>${escapeHtmlGlobal(source.pageLabelZh)}</em>
+                        <small>${escapeHtmlGlobal(source.snippet || '暂无原文片段。')}</small>
+                    </span>
+                    <span class="reader-evidence-jump">${source.canJump ? jumpLabel : '无法跳转'}</span>
+                </button>`;
+        }).join('');
+    }
+
+    async function lookupReaderEvidence() {
+        if (!readerEvidenceInput || !readerEvidenceBtn || !readerEvidenceResults) return;
+        const query = readerEvidenceInput.value.trim();
+        if (!query) return;
+
+        const scope = document.querySelector('input[name="readerEvidenceScope"]:checked')?.value || 'current';
+        const params = new URLSearchParams({
+            q: query,
+            search_type: 'hybrid',
+            top_k: '8'
+        });
+        if (scope === 'current' && readerState.paperId) {
+            params.set('paper_id', readerState.paperId);
+        }
+
+        readerEvidenceBtn.disabled = true;
+        readerEvidenceBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在查找';
+        readerEvidenceResults.innerHTML = '<p class="reader-empty">正在检索原文片段...</p>';
+
+        try {
+            const res = await fetch(`/api/search/chunks?${params.toString()}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || '查找证据失败');
+            renderReaderEvidenceResults(data.results || []);
+        } catch (error) {
+            readerEvidenceResults.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
+        } finally {
+            readerEvidenceBtn.disabled = false;
+            readerEvidenceBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass-location"></i> 查找证据';
+        }
+    }
+
+    function setReaderTranslationStatus(message = '', isError = false) {
+        if (!readerTranslateStatus) return;
+        readerTranslateStatus.textContent = message;
+        readerTranslateStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    function resetReaderTranslation() {
+        readerState.lastTranslateSource = '';
+        if (readerTranslateSource) readerTranslateSource.value = '';
+        if (readerTranslateResult) readerTranslateResult.textContent = '翻译结果会显示在这里。';
+        if (readerRetryTranslateBtn) readerRetryTranslateBtn.classList.add('hidden');
+        setReaderTranslationStatus('');
+        if (readerTranslateBtn) {
+            readerTranslateBtn.disabled = false;
+            readerTranslateBtn.innerHTML = '<i class="fa-solid fa-language"></i> 翻译';
+        }
+    }
+
+    async function getCurrentPageText() {
+        if (!readerState.pdfDoc) throw new Error('No PDF is loaded.');
+        const pageNum = readerState.pageNum || 1;
+        if (readerState.pageTextCache[pageNum]) return readerState.pageTextCache[pageNum];
+
+        const page = await readerState.pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const text = (textContent.items || [])
+            .map(item => item.str || '')
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        readerState.pageTextCache[pageNum] = text;
+        return text;
+    }
+
+    async function fillReaderTranslationFromPage() {
+        if (!readerTranslateSource || !readerUsePageTextBtn) return;
+        readerUsePageTextBtn.disabled = true;
+        setReaderTranslationStatus('正在读取当前页文本...');
+        try {
+            const text = await getCurrentPageText();
+            if (!text) throw new Error('当前页没有可提取文本，可能是扫描版 PDF。');
+            readerTranslateSource.value = text.slice(0, 12000);
+            setReaderTranslationStatus(text.length > 12000 ? '已填入当前页前 12000 字符。' : '已填入当前页文本。');
+        } catch (error) {
+            setReaderTranslationStatus(error.message, true);
+        } finally {
+            readerUsePageTextBtn.disabled = false;
+        }
+    }
+
+    async function translateReaderText(sourceOverride = null) {
+        if (!readerTranslateSource || !readerTranslateResult || !readerTranslateBtn) return;
+        const sourceText = (sourceOverride || readerTranslateSource.value || '').trim();
+        if (!sourceText) {
+            setReaderTranslationStatus('请先输入或填入要翻译的原文。', true);
+            return;
+        }
+
+        readerState.lastTranslateSource = sourceText;
+        readerTranslateBtn.disabled = true;
+        readerTranslateBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 翻译中';
+        if (readerRetryTranslateBtn) readerRetryTranslateBtn.classList.add('hidden');
+        readerTranslateResult.textContent = '正在翻译...';
+        setReaderTranslationStatus('');
+
+        try {
+            const res = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: sourceText,
+                    source_language: 'auto',
+                    target_language: 'zh-CN'
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || '翻译失败');
+            readerTranslateResult.textContent = data.translated_text || '';
+            setReaderTranslationStatus(`已完成 · ${data.model || 'translator'}`);
+        } catch (error) {
+            readerTranslateResult.textContent = '翻译失败。';
+            setReaderTranslationStatus(error.message, true);
+            if (readerRetryTranslateBtn) readerRetryTranslateBtn.classList.remove('hidden');
+        } finally {
+            readerTranslateBtn.disabled = false;
+            readerTranslateBtn.innerHTML = '<i class="fa-solid fa-language"></i> 翻译';
+        }
     }
 
     async function renderPdfPage(pageNum) {
@@ -392,28 +567,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadReaderChunks(paperId) {
-        readerChunks.innerHTML = '<p class="reader-empty">Loading chunks...</p>';
+        readerState.chunks = [];
+        if (readerChunks) readerChunks.innerHTML = '';
         try {
             const res = await fetch(`/api/papers/${paperId}/chunks?limit=200`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Failed to load chunks');
             const chunks = data.chunks || [];
+            readerState.chunks = chunks;
             if (!chunks.length) {
-                readerChunks.innerHTML = '<p class="reader-empty">No chunks available for this paper.</p>';
                 return;
             }
             readerChunks.innerHTML = chunks.map(chunk => `
-                <button class="reader-chunk" data-page="${chunk.page_start || 1}" data-page-start="${chunk.page_start || 1}" data-page-end="${chunk.page_end || chunk.page_start || 1}">
-                    <span>Chunk ${chunk.chunk_index + 1}${chunk.page_start ? ` - p.${chunk.page_start}${chunk.page_end && chunk.page_end !== chunk.page_start ? `-${chunk.page_end}` : ''}` : ''}</span>
-                    <p>${escapeHtmlGlobal((chunk.content || '').slice(0, 220))}</p>
-                </button>
+                <span class="reader-chunk" data-page="${chunk.page_start || 1}" data-page-start="${chunk.page_start || 1}" data-page-end="${chunk.page_end || chunk.page_start || 1}"></span>
             `).join('');
-            readerChunks.querySelectorAll('.reader-chunk').forEach(btn => {
-                btn.addEventListener('click', () => queuePdfPage(Number(btn.dataset.page || 1)));
-            });
             highlightReaderChunks();
         } catch (error) {
-            readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
+            console.warn('Failed to load reader chunks:', error);
+            readerState.chunks = [];
         }
     }
 
@@ -433,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showView('reader', false);
         readerTitle.textContent = 'Loading PDF...';
         readerStatus.textContent = 'Preparing reader';
-        readerChunks.innerHTML = '<p class="reader-empty">Loading chunks...</p>';
+        if (readerChunks) readerChunks.innerHTML = '';
         resetReaderState();
         readerTitle.textContent = 'Loading PDF...';
         readerStatus.textContent = 'Preparing reader';
@@ -458,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
             resetReaderState();
             readerTitle.textContent = 'PDF Reader';
             readerStatus.textContent = 'Failed to load PDF';
-            readerChunks.innerHTML = `<p class="reader-empty">${escapeHtmlGlobal(error.message)}</p>`;
+            if (readerChunks) readerChunks.innerHTML = '';
         }
     };
 
@@ -489,6 +660,40 @@ document.addEventListener('DOMContentLoaded', () => {
             queuePdfPage(Number(readerPageInput.value));
         }
     });
+    if (readerEvidenceBtn) {
+        readerEvidenceBtn.addEventListener('click', lookupReaderEvidence);
+    }
+    if (readerEvidenceInput) {
+        readerEvidenceInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                lookupReaderEvidence();
+            }
+        });
+    }
+    if (readerEvidenceResults) {
+        readerEvidenceResults.addEventListener('click', (event) => {
+            const card = event.target.closest('.reader-evidence-card[data-paper-id]');
+            if (!card) return;
+            event.preventDefault();
+            const paperId = card.dataset.paperId;
+            const page = Number(card.dataset.page || 1);
+            if (paperId === readerState.paperId) {
+                queuePdfPage(page);
+            } else {
+                window.openPdfReader(paperId, page);
+            }
+        });
+    }
+    if (readerUsePageTextBtn) {
+        readerUsePageTextBtn.addEventListener('click', fillReaderTranslationFromPage);
+    }
+    if (readerTranslateBtn) {
+        readerTranslateBtn.addEventListener('click', () => translateReaderText());
+    }
+    if (readerRetryTranslateBtn) {
+        readerRetryTranslateBtn.addEventListener('click', () => translateReaderText(readerState.lastTranslateSource));
+    }
     updateReaderControls();
 
     // === 弹窗详情 ===

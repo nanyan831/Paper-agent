@@ -197,8 +197,39 @@
                         </div>
                     </div>
                     <aside class="reader-sidebar">
-                        <h3>Full-text chunks</h3>
-                        <div id="readerChunks" class="reader-chunks">
+                        <div class="reader-translation-panel">
+                            <div class="translation-header">
+                                <div>
+                                    <h3>阅读翻译器</h3>
+                                    <p>中英 / 中文对照</p>
+                                </div>
+                                <button id="readerUsePageTextBtn" class="reader-btn text-reader-btn" title="Use current page text">
+                                    <i class="fa-solid fa-file-lines"></i>
+                                </button>
+                            </div>
+                            <div class="translation-columns">
+                                <label class="translation-pane">
+                                    <span>原文</span>
+                                    <textarea id="readerTranslateSource" rows="9" placeholder="粘贴英文段落，或点击上方按钮填入当前页文本。"></textarea>
+                                </label>
+                                <div class="translation-pane">
+                                    <span>中文翻译</span>
+                                    <div id="readerTranslateResult" class="translation-result" aria-live="polite">
+                                        翻译结果会显示在这里。
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="translation-actions">
+                                <button id="readerTranslateBtn" class="primary-btn">
+                                    <i class="fa-solid fa-language"></i> 翻译
+                                </button>
+                                <button id="readerRetryTranslateBtn" class="ghost-btn hidden">
+                                    <i class="fa-solid fa-rotate-right"></i> 重试
+                                </button>
+                            </div>
+                            <div id="readerTranslateStatus" class="translation-status"></div>
+                        </div>
+                        <div id="readerChunks" class="reader-chunks" hidden aria-hidden="true">
                             <p class="reader-empty">Open a PDF to inspect its chunks.</p>
                         </div>
                     </aside>

@@ -1021,7 +1021,7 @@ body {
 
 .reader-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) minmax(440px, 0.58fr);
     gap: 20px;
     height: calc(100vh - 80px);
 }
@@ -1125,13 +1125,104 @@ body {
 .reader-sidebar {
     display: flex;
     flex-direction: column;
+    gap: 16px;
     padding: 18px;
     overflow: hidden;
 }
 
-.reader-sidebar h3 {
+.reader-sidebar h3,
+.translation-header h3 {
     font-size: 16px;
-    margin-bottom: 12px;
+    margin-bottom: 4px;
+}
+
+.reader-translation-panel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.translation-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.translation-header p,
+.translation-status {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin: 0;
+}
+
+.translation-status.error {
+    color: #fca5a5;
+}
+
+.text-reader-btn {
+    flex: 0 0 auto;
+}
+
+.translation-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+}
+
+.translation-pane {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.translation-pane span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#readerTranslateSource,
+.translation-result {
+    width: 100%;
+    min-height: 190px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(15, 17, 21, 0.7);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 10px 12px;
+}
+
+#readerTranslateSource {
+    resize: vertical;
+    outline: none;
+}
+
+#readerTranslateSource:focus {
+    border-color: var(--border-focus);
+}
+
+.translation-result {
+    white-space: pre-wrap;
+}
+
+.translation-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.translation-actions .primary-btn {
+    flex: 1;
 }
 
 .reader-chunks {
@@ -1139,6 +1230,10 @@ body {
     display: grid;
     gap: 10px;
     padding-right: 4px;
+}
+
+.reader-chunks[hidden] {
+    display: none !important;
 }
 
 .reader-chunk {
@@ -1194,6 +1289,10 @@ body {
     .reader-controls {
         width: 100%;
         flex-wrap: wrap;
+    }
+
+    .translation-columns {
+        grid-template-columns: 1fr;
     }
 }
 .modal {
