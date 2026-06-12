@@ -10,6 +10,17 @@ from rag.pdf_processor import extract_pdf_pages, chunk_pdf_pages, build_pdf_pape
 router = APIRouter(prefix="/api/papers", tags=["Papers"])
 
 
+def _build_import_quality_warnings(page_count: int, chunk_count: int, text_chars: int) -> list[str]:
+    warnings = []
+    if page_count == 0:
+        warnings.append("解析页数为 0，可能不是有效 PDF 或无法读取页面")
+    if chunk_count == 0:
+        warnings.append("没有生成可检索片段，可能是扫描版/不可检索，需要 OCR 或换 PDF")
+    if page_count > 0 and text_chars < 800:
+        warnings.append("抽取文本明显过少，可能是扫描版/图片型 PDF，需要 OCR 或换 PDF")
+    return warnings
+
+
 async def _import_pdf_upload(
     request: Request,
     file: UploadFile,
@@ -40,6 +51,7 @@ async def _import_pdf_upload(
         raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {e}")
 
     full_text = "\n\n".join(page["text"] for page in pages)
+    text_chars = len(full_text.strip())
     resolved_title = title or Path(filename).stem
     paper = build_pdf_paper(
         title=resolved_title,
@@ -69,6 +81,8 @@ async def _import_pdf_upload(
         "parse_status": paper["parse_status"],
         "pages": len(pages),
         "chunks": len(chunks),
+        "text_chars": text_chars,
+        "quality_warnings": _build_import_quality_warnings(len(pages), len(chunks), text_chars),
     }
 
 @router.get("")

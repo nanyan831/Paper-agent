@@ -469,6 +469,11 @@ body {
     background: rgba(255, 255, 255, 0.025);
 }
 
+.recent-pdf-card.has-quality-warning {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.06);
+}
+
 .recent-pdf-main {
     min-width: 0;
 }
@@ -503,6 +508,16 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 5px;
+}
+
+.quality-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 7px;
+    color: #f59e0b;
+    font-size: 12px;
+    line-height: 1.45;
 }
 
 .reader-open-btn {
@@ -802,6 +817,11 @@ body {
     color: var(--text-secondary);
     font-size: 12px;
     margin: 0;
+}
+
+.import-result-item .quality-warning {
+    display: flex;
+    margin-top: 6px;
 }
 
 /* 空状态 */

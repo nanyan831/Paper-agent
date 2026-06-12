@@ -182,8 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
         recentPdfs.innerHTML = pdfPapers.map(paper => {
             const chunkCount = Number(paper.chunk_count || 0);
             const pageCount = Number(paper.page_count || 0);
+            const needsOcrHint = pageCount === 0 || chunkCount === 0;
             return `
-                <article class="recent-pdf-card">
+                <article class="recent-pdf-card${needsOcrHint ? ' has-quality-warning' : ''}">
                     <div class="recent-pdf-main">
                         <h4 title="${escapeHtmlGlobal(paper.title)}">${escapeHtmlGlobal(paper.title || '未命名资料')}</h4>
                         <p>${escapeHtmlGlobal(paper.authors || '未知作者')}</p>
@@ -192,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span><i class="fa-solid fa-layer-group"></i> ${chunkCount} 个片段</span>
                             <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlGlobal(paper.parse_status || 'unknown')}</span>
                         </div>
+                        ${needsOcrHint ? '<div class="quality-warning"><i class="fa-solid fa-triangle-exclamation"></i> 可能是扫描版/不可检索，需要 OCR 或换 PDF</div>' : ''}
                     </div>
                     <button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(paper.id)}')" title="打开原文">
                         <i class="fa-solid fa-book-open-reader"></i>
@@ -627,8 +629,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div>
                         <strong>${escapeHtmlGlobal(item.title || item.filename || '未命名 PDF')}</strong>
                         <p>${item.success
-                            ? `页数：${item.pages} · 全文片段：${item.chunks} · 状态：${escapeHtmlGlobal(item.parse_status || 'unknown')}`
+                            ? `页数：${item.pages} · 全文片段：${item.chunks} · 文本字数：${item.text_chars || 0} · 状态：${escapeHtmlGlobal(item.parse_status || 'unknown')}`
                             : `失败原因：${escapeHtmlGlobal(item.error || '未知错误')}`}</p>
+                        ${item.success && item.quality_warnings && item.quality_warnings.length ? `
+                            <div class="quality-warning">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                ${escapeHtmlGlobal(item.quality_warnings.join('；'))}
+                            </div>` : ''}
                     </div>
                     ${item.success ? `<button class="reader-open-btn" onclick="openPdfReader('${escapeHtmlGlobal(item.paper_id)}')" title="打开原文"><i class="fa-solid fa-book-open-reader"></i></button>` : ''}
                 </div>
