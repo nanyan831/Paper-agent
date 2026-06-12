@@ -23,3 +23,16 @@ logs/
 .vscode/
 .idea/
 .DS_Store
+
+# Local survey/design/test artifacts
+survey_receipt_*/
+survey_receipt_*.txt
+screenshots/
+take_screenshots.py
+generate_design_doc*.py
+generate_frontend_doc.py
+Frontend_UI_Analysis.pdf
+UI_Design_Reference.pdf
+UI_设计参考文档.pdf
+Paper_Agent_user_survey*.docx
+server-verify*.log

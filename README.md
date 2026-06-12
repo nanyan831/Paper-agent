@@ -5,8 +5,10 @@ Paper Agent 是一个本地论文记忆库和 RAG 学术助手。它可以抓取
 ## 主要功能
 
 - 文献检索：支持关键词、语义、混合检索。
-- PDF 导入：上传本地 PDF 后自动抽取文本、切块、写入本地数据库和向量库。
-- RAG 问答：AI 对话优先检索本地论文全文切块，再补充摘要和元数据。
+- PDF 导入：支持单篇或批量上传本地 PDF，自动抽取文本、切块、写入本地数据库和向量库。
+- 找出处 / 查证据：输入一句观点或问题，直接检索本地 PDF chunk，返回可能来源、页码和原文片段。
+- RAG 问答：AI 对话优先检索本地论文全文切块，并返回结构化来源。
+- PDF 原文跳转：点击 AI 来源或找出处结果，可打开 PDF 查看器并跳到对应页。
 - 聊天记录：完整聊天记录保存在本地 SQLite，模型上下文只发送摘要和最近几轮，降低 token 消耗。
 - 爬虫调度：支持 arXiv、Semantic Scholar、CrossRef 等来源的文献抓取入口。
 
@@ -76,7 +78,34 @@ http://127.0.0.1:8000
 
 后续 AI 对话和全文检索都会优先使用这些 chunk。
 
-### 2. 搜索文献
+现在支持一次选择多个 PDF。批量导入后，每个文件都会返回独立结果：
+
+- 成功：显示论文标题、paper id、页数、chunk 数，并可直接打开原文。
+- 空文件：提示 `Uploaded PDF is empty`。
+- 非 PDF：提示 `Only PDF files are supported`。
+- 解析失败：提示 PDF 解析失败原因。
+
+### 2. 找出处 / 查证据
+
+进入“探索文献”，使用“找出处 / 查证据”入口。
+
+适合输入：
+
+```text
+RAG 可以降低大模型幻觉吗？这个结论出自哪篇论文？
+```
+
+系统会调用本地全文 chunk 检索，返回：
+
+- 论文名
+- 页码范围
+- 原文片段
+- 检索方式
+- 打开原文页按钮
+
+这个入口是第一阶段 MVP 的核心，不是普通搜索框。它主要回答“这句话有没有本地依据、依据在哪里”。
+
+### 3. 搜索文献
 
 进入“探索文献”，输入研究主题或问题。
 
@@ -86,7 +115,7 @@ http://127.0.0.1:8000
 - 语义检索：更适合概念性问题。
 - 关键词检索：更适合精确词、标题、术语。
 
-### 3. AI 对话
+### 4. AI 对话
 
 左下角有 AI 对话按钮。
 
@@ -96,6 +125,44 @@ http://127.0.0.1:8000
 - 模型上下文：只发送系统提示、历史摘要和最近 10 条用户/助手消息，避免长对话不断消耗 token。
 
 AI 回答论文细节时会优先调用 `search_chunks` 检索本地全文片段；如果本地全文不足，再调用 `search_papers` 查询摘要和元数据。
+
+回答来源会同时以两种形式保存：
+
+- 文本中的“本地引用来源”。
+- API 返回的结构化 `sources`。
+
+每条 source 包含：
+
+```json
+{
+  "paper_id": "...",
+  "title": "...",
+  "page_start": 1,
+  "page_end": 2,
+  "snippet": "...",
+  "chunk_id": "...",
+  "search_score": 0.01,
+  "search_type": "hybrid_chunk",
+  "chunk_index": 0,
+  "evidence": {
+    "confidence": "medium"
+  }
+}
+```
+
+如果没有本地证据，Agent 会明确说明“本地论文库没有找到可引用依据”，不会给确定结论。如果来源数量少或质量信号弱，回答会加上“证据不足，只能作为线索”。
+
+### 5. 打开 PDF 原文
+
+最近收录资料、找出处结果、AI 来源卡片都可以打开 PDF 查看器。
+
+阅读器支持：
+
+- 上一页 / 下一页
+- 页码输入
+- 缩放
+- 右侧 chunk 列表
+- 点击来源跳转到 `page_start`
 
 ## RAG 数据结构
 
@@ -143,6 +210,37 @@ data/
 - 增加 usage 看板，统计每天/每会话 token 成本。
 - 对长论文摘要做离线预处理，减少在线问答成本。
 
+## MVP 试用路线
+
+第一阶段不要把 Paper Agent 做成 Zotero 替代品，也不要优先做自动写完整论文。
+
+当前最应该验证的闭环是：
+
+```text
+导入 5-30 篇真实 PDF
+    ↓
+围绕真实任务提问或找出处
+    ↓
+回答显示论文名、页码、原文片段
+    ↓
+点击来源回到 PDF 对应页
+    ↓
+用户判断是否敢引用
+```
+
+试用前 checklist 在：
+
+```text
+docs/mvp_trial_checklist.md
+```
+
+第一轮试用暂时不重点测试：
+
+- 复杂文献图谱
+- 多人协作
+- 自动写完整论文
+- 精美笔记系统
+
 ## 常见问题
 
 ### 论文在内网，爬虫抓不到怎么办？
@@ -165,7 +263,15 @@ data/
 
 ```powershell
 .\.venv\Scripts\python.exe -m compileall agent agent_tools crawlers database rag routes scheduler main.py config.py
+node --check static\js\app.js
 git status --short --branch
+```
+
+常用接口回归：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/papers?source=local_pdf&limit=6"
+Invoke-RestMethod "http://127.0.0.1:8000/api/search/chunks?q=Autoregressive%20Retrieval%20Augmentation&search_type=hybrid&top_k=2"
 ```
 
 ## 推送到远程
