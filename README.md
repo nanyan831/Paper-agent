@@ -274,6 +274,18 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/papers?source=local_pdf&limit=6"
 Invoke-RestMethod "http://127.0.0.1:8000/api/search/chunks?q=Autoregressive%20Retrieval%20Augmentation&search_type=hybrid&top_k=2"
 ```
 
+引用准确性自测（不调用 LLM，不消耗 token）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_evidence_flow.py
+```
+
+详细说明见：
+
+```text
+docs/evidence_flow_verification.md
+```
+
 ## 推送到远程
 
 ```powershell
