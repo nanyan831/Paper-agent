@@ -799,6 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatPanel = document.getElementById('view-chat');
     const chatToggleBtn = document.getElementById('chatToggleBtn');
     const chatCloseBtn = document.getElementById('chatCloseBtn');
+    let chatTypingRunId = 0;
 
     function openChatPanel() {
         chatPanel.classList.remove('hidden');
@@ -816,12 +817,112 @@ document.addEventListener('DOMContentLoaded', () => {
     chatToggleBtn.addEventListener('click', openChatPanel);
     chatCloseBtn.addEventListener('click', closeChatPanel);
 
-    // 简单 Markdown 解析器 (加粗和换行)
+    function renderInlineMarkdown(text) {
+        const codeSpans = [];
+        let html = escapeHtmlGlobal(text).replace(/`([^`]+)`/g, (_, code) => {
+            const token = `@@CODE_SPAN_${codeSpans.length}@@`;
+            codeSpans.push(`<code>${code}</code>`);
+            return token;
+        });
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        codeSpans.forEach((code, index) => {
+            html = html.replace(`@@CODE_SPAN_${index}@@`, code);
+        });
+        return html;
+    }
+
+    function flushMarkdownParagraph(parts, output) {
+        if (!parts.length) return;
+        output.push(`<p>${parts.map(renderInlineMarkdown).join('<br>')}</p>`);
+        parts.length = 0;
+    }
+
+    function flushMarkdownList(listState, output) {
+        if (!listState.items.length) return;
+        output.push(`<${listState.type}>${listState.items.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</${listState.type}>`);
+        listState.items = [];
+        listState.type = null;
+    }
+
     function parseSimpleMarkdown(text) {
         if (!text) return '';
-        let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\n/g, '<br>');
-        return html;
+        const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+        const output = [];
+        const paragraph = [];
+        const listState = { type: null, items: [] };
+        let inCodeBlock = false;
+        let codeLanguage = '';
+        let codeLines = [];
+
+        const flushBlocks = () => {
+            flushMarkdownParagraph(paragraph, output);
+            flushMarkdownList(listState, output);
+        };
+
+        lines.forEach(line => {
+            const fence = line.match(/^```(\w+)?\s*$/);
+            if (fence) {
+                if (inCodeBlock) {
+                    output.push(`<pre><code${codeLanguage ? ` data-language="${escapeHtmlGlobal(codeLanguage)}"` : ''}>${escapeHtmlGlobal(codeLines.join('\n'))}</code></pre>`);
+                    inCodeBlock = false;
+                    codeLanguage = '';
+                    codeLines = [];
+                } else {
+                    flushBlocks();
+                    inCodeBlock = true;
+                    codeLanguage = fence[1] || '';
+                    codeLines = [];
+                }
+                return;
+            }
+
+            if (inCodeBlock) {
+                codeLines.push(line);
+                return;
+            }
+
+            if (!line.trim()) {
+                flushBlocks();
+                return;
+            }
+
+            const heading = line.match(/^(#{1,3})\s+(.+)$/);
+            if (heading) {
+                flushBlocks();
+                const level = Math.min(heading[1].length + 2, 5);
+                output.push(`<h${level}>${renderInlineMarkdown(heading[2].trim())}</h${level}>`);
+                return;
+            }
+
+            const quote = line.match(/^>\s?(.*)$/);
+            if (quote) {
+                flushBlocks();
+                output.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+                return;
+            }
+
+            const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+            const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+            if (unordered || ordered) {
+                flushMarkdownParagraph(paragraph, output);
+                const type = unordered ? 'ul' : 'ol';
+                if (listState.type && listState.type !== type) {
+                    flushMarkdownList(listState, output);
+                }
+                listState.type = type;
+                listState.items.push((unordered || ordered)[1].trim());
+                return;
+            }
+
+            flushMarkdownList(listState, output);
+            paragraph.push(line);
+        });
+
+        if (inCodeBlock) {
+            output.push(`<pre><code${codeLanguage ? ` data-language="${escapeHtmlGlobal(codeLanguage)}"` : ''}>${escapeHtmlGlobal(codeLines.join('\n'))}</code></pre>`);
+        }
+        flushBlocks();
+        return output.join('');
     }
 
 
@@ -843,18 +944,58 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="source-card-list">${cards}</div>`;
     }
 
+    function isNearChatBottom(threshold = 72) {
+        return chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight <= threshold;
+    }
+
     function scrollToBottom() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
+    function maybeScrollToBottom(shouldFollow) {
+        if (shouldFollow) scrollToBottom();
+    }
+
+    function startAssistantTyping(contentEl, msg, runId) {
+        const fullText = msg.content || '';
+        const sourceHtml = renderSourceCards(msg.sources);
+        const chunkSize = fullText.length > 900 ? 5 : 2;
+        let offset = 0;
+
+        function renderFrame() {
+            if (runId !== chatTypingRunId) return;
+            const shouldFollow = isNearChatBottom();
+            offset = Math.min(offset + chunkSize, fullText.length);
+            contentEl.innerHTML = parseSimpleMarkdown(fullText.slice(0, offset));
+
+            if (offset >= fullText.length) {
+                contentEl.innerHTML = `${parseSimpleMarkdown(fullText)}${sourceHtml}`;
+                maybeScrollToBottom(shouldFollow);
+                return;
+            }
+
+            maybeScrollToBottom(shouldFollow);
+            window.setTimeout(renderFrame, 14);
+        }
+
+        renderFrame();
+    }
+
     // 渲染聊天记录
-    function renderChatMessages() {
+    function renderChatMessages(options = {}) {
+        chatTypingRunId += 1;
+        const typingRunId = chatTypingRunId;
+        const shouldFollow = options.forceScroll || isNearChatBottom();
+        const lastAssistantIndex = options.animateLastAssistant
+            ? currentChatMessages.map(msg => msg.role).lastIndexOf('assistant')
+            : -1;
+
         // 清空除了初始欢迎语之外的全部气泡
         const initialWelcome = chatHistory.firstElementChild;
         chatHistory.innerHTML = '';
         if (initialWelcome) chatHistory.appendChild(initialWelcome);
 
-        currentChatMessages.forEach(msg => {
+        currentChatMessages.forEach((msg, index) => {
             if (msg.role === 'system') return; // 不渲染 system prompt
 
             const bubble = document.createElement('div');
@@ -867,17 +1008,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (msg.tool_calls && msg.tool_calls.length > 0) {
                     // 模型尝试调用工具的提示气泡
                     bubble.classList.add('tool-bubble');
-                    const toolNames = msg.tool_calls.map(tc => tc.function.name).join(', ');
+                    const toolNames = msg.tool_calls.map(tc => (tc.function && tc.function.name) || 'tool').join(', ');
                     bubble.innerHTML = `
                         <div class="tool-content">
                             <i class="fa-solid fa-wrench"></i>
-                            <span>Agent 正在调用内部工具: ${toolNames}...</span>
+                            <span>Agent 正在调用内部工具: ${escapeHtmlGlobal(toolNames)}...</span>
                         </div>
                     `;
                 } else if (msg.content) {
                     // 正常的助手回复
                     bubble.classList.add('assistant-bubble');
-                    bubble.innerHTML = `<div class="bubble-content">${parseSimpleMarkdown(msg.content)}${renderSourceCards(msg.sources)}</div>`;
+                    const content = document.createElement('div');
+                    content.classList.add('bubble-content');
+                    bubble.appendChild(content);
+                    if (options.animateLastAssistant && index === lastAssistantIndex) {
+                        content.innerHTML = '';
+                        chatHistory.appendChild(bubble);
+                        maybeScrollToBottom(shouldFollow);
+                        startAssistantTyping(content, msg, typingRunId);
+                        return;
+                    }
+                    content.innerHTML = `${parseSimpleMarkdown(msg.content)}${renderSourceCards(msg.sources)}`;
                 } else {
                     return; // 防止空状态
                 }
@@ -886,13 +1037,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 bubble.innerHTML = `
                     <div class="tool-content" style="border-color: #10b981;">
                         <i class="fa-solid fa-check" style="color: #10b981;"></i>
-                        <span>工具 [${msg.name}] 执行完毕</span>
+                        <span>工具 [${escapeHtmlGlobal(msg.name)}] 执行完毕</span>
                     </div>
                 `;
             }
             chatHistory.appendChild(bubble);
         });
-        scrollToBottom();
+        maybeScrollToBottom(shouldFollow);
     }
 
     // 发送消息
@@ -944,8 +1095,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `;
+        const shouldFollowLoading = isNearChatBottom();
         chatHistory.appendChild(loadingBubble);
-        scrollToBottom();
+        maybeScrollToBottom(shouldFollowLoading);
 
         try {
             const res = await fetch('/api/agent/chat', {
@@ -976,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chatInput.disabled = false;
             chatSendBtn.disabled = false;
             chatInput.focus();
-            renderChatMessages(); // 重新渲染最终状态（移除 loading 气泡）
+            renderChatMessages({ animateLastAssistant: true }); // 重新渲染最终状态（移除 loading 气泡）
         }
     }
 

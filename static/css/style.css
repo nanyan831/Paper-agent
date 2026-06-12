@@ -1359,9 +1359,76 @@ body {
 .assistant-bubble .bubble-content p:last-child {
     margin-bottom: 0;
 }
-.assistant-bubble .bubble-content ul {
-    margin-left: 20px;
-    margin-bottom: 8px;
+
+.bubble-content h3,
+.bubble-content h4,
+.bubble-content h5 {
+    margin: 4px 0 8px;
+    color: var(--text-primary);
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.bubble-content h3 {
+    font-size: 18px;
+}
+
+.bubble-content h4 {
+    font-size: 16px;
+}
+
+.bubble-content h5 {
+    font-size: 15px;
+}
+
+.assistant-bubble .bubble-content ul,
+.assistant-bubble .bubble-content ol,
+.user-bubble .bubble-content ul,
+.user-bubble .bubble-content ol {
+    margin: 6px 0 10px 20px;
+    padding-left: 4px;
+}
+
+.bubble-content li {
+    margin: 4px 0;
+}
+
+.bubble-content blockquote {
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent-secondary);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+}
+
+.bubble-content code {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+    font-size: 0.92em;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.22);
+    color: #dbeafe;
+    padding: 1px 5px;
+}
+
+.bubble-content pre {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 10px 0;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: var(--radius-sm);
+    background: rgba(8, 12, 20, 0.82);
+}
+
+.bubble-content pre code {
+    display: block;
+    border: 0;
+    background: transparent;
+    color: #e5e7eb;
+    padding: 0;
+    white-space: pre;
 }
 
 /* 工具调用提示状态 */
