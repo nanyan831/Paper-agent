@@ -1072,6 +1072,39 @@ body {
     gap: 8px;
 }
 
+.reader-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 34px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(15, 17, 21, 0.72);
+}
+
+.reader-mode-btn {
+    height: 28px;
+    min-width: 46px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.reader-mode-btn.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.reader-mode-btn:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
 .reader-btn {
     width: 34px;
     height: 34px;
@@ -1112,7 +1145,14 @@ body {
     display: flex;
     align-items: flex-start;
     justify-content: center;
+    gap: 24px;
     background: #111318;
+}
+
+.pdf-page-shell {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 #pdfCanvas {
@@ -1120,6 +1160,79 @@ body {
     display: block;
     max-width: none;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.reader-translated-page {
+    flex: 0 0 auto;
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    padding: 54px 58px;
+    overflow: hidden;
+}
+
+.reader-translated-page.hidden {
+    display: none;
+}
+
+.pdf-canvas-wrap[data-mode="translated"] .pdf-page-shell {
+    display: none;
+}
+
+.pdf-canvas-wrap[data-mode="translated"] .reader-translated-page {
+    display: block;
+}
+
+.pdf-canvas-wrap[data-mode="bilingual"] {
+    justify-content: flex-start;
+}
+
+.translated-page-head {
+    display: grid;
+    gap: 6px;
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid #d7dce5;
+    color: #4b5563;
+    font-family: Georgia, "Times New Roman", serif;
+}
+
+.translated-page-head span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.translated-page-head strong {
+    color: #111827;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.translated-page-body {
+    font-family: "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.9;
+}
+
+.translated-page-body p {
+    margin: 0 0 15px;
+    text-align: justify;
+}
+
+.translated-page-placeholder {
+    min-height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 15px;
+    text-align: center;
+}
+
+.translated-page-placeholder.error {
+    color: #b91c1c;
 }
 
 .reader-sidebar {

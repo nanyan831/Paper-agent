@@ -129,6 +129,8 @@ document.addEventListener('DOMContentLoaded', () => {
         pendingPage: null,
         chunks: [],
         pageTextCache: {},
+        pageTranslationCache: {},
+        readerMode: 'original',
         lastTranslateSource: '',
         returnView: 'search'
     };
@@ -152,6 +154,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const readerNextBtn = document.getElementById('readerNextBtn');
     const readerZoomOutBtn = document.getElementById('readerZoomOutBtn');
     const readerZoomInBtn = document.getElementById('readerZoomInBtn');
+    const readerOriginalModeBtn = document.getElementById('readerOriginalModeBtn');
+    const readerTranslatedModeBtn = document.getElementById('readerTranslatedModeBtn');
+    const readerBilingualModeBtn = document.getElementById('readerBilingualModeBtn');
+    const readerTranslatedPage = document.getElementById('readerTranslatedPage');
+    const pdfCanvasWrap = document.querySelector('.pdf-canvas-wrap');
 
     if (window.pdfjsLib) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -167,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
         readerNextBtn.disabled = !total || readerState.pageNum >= total;
         readerZoomOutBtn.disabled = !total || readerState.scale <= 0.6;
         readerZoomInBtn.disabled = !total || readerState.scale >= 2.4;
+        updateReaderModeButtons(Boolean(total));
         if (readerState.renderError) {
             readerStatus.textContent = readerState.renderError;
         } else if (total) {
@@ -177,6 +185,22 @@ document.addEventListener('DOMContentLoaded', () => {
             readerStatus.textContent = 'No paper loaded';
         }
         highlightReaderChunks();
+    }
+
+    function updateReaderModeButtons(enabled = true) {
+        const modeButtons = [
+            [readerOriginalModeBtn, 'original'],
+            [readerTranslatedModeBtn, 'translated'],
+            [readerBilingualModeBtn, 'bilingual']
+        ];
+        modeButtons.forEach(([button, mode]) => {
+            if (!button) return;
+            button.disabled = !enabled;
+            button.classList.toggle('active', readerState.readerMode === mode);
+        });
+        if (pdfCanvasWrap) {
+            pdfCanvasWrap.dataset.mode = readerState.readerMode;
+        }
     }
 
     function renderRecentPdfs(papers) {
@@ -365,10 +389,21 @@ document.addEventListener('DOMContentLoaded', () => {
         readerState.pendingPage = null;
         readerState.chunks = [];
         readerState.pageTextCache = {};
+        readerState.pageTranslationCache = {};
+        readerState.readerMode = 'original';
+        clearTranslatedPage();
         clearReaderCanvas();
         updateReaderControls();
         resetReaderEvidence();
         resetReaderTranslation();
+    }
+
+    function clearTranslatedPage() {
+        if (!readerTranslatedPage) return;
+        readerTranslatedPage.classList.add('hidden');
+        readerTranslatedPage.style.width = '';
+        readerTranslatedPage.style.minHeight = '';
+        readerTranslatedPage.innerHTML = '<div class="translated-page-placeholder">切换到译文模式后，会把当前页渲染成中文阅读页。</div>';
     }
 
     function resetReaderEvidence() {
@@ -474,6 +509,86 @@ document.addEventListener('DOMContentLoaded', () => {
         return text;
     }
 
+    async function requestReaderTranslation(sourceText) {
+        const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: sourceText,
+                source_language: 'auto',
+                target_language: 'zh-CN'
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '翻译失败');
+        return data;
+    }
+
+    function renderTranslatedPageContent(text, pageNum) {
+        if (!readerTranslatedPage) return;
+        const paragraphs = String(text || '')
+            .split(/\n{2,}/)
+            .map(part => part.trim())
+            .filter(Boolean);
+        readerTranslatedPage.innerHTML = `
+            <header class="translated-page-head">
+                <span>${escapeHtmlGlobal(readerState.paper?.title || 'Translated paper')}</span>
+                <strong>第 ${pageNum} 页译文</strong>
+            </header>
+            <div class="translated-page-body">
+                ${(paragraphs.length ? paragraphs : [text]).map(part => `<p>${escapeHtmlGlobal(part)}</p>`).join('')}
+            </div>`;
+    }
+
+    function setTranslatedPageMessage(message, isError = false) {
+        if (!readerTranslatedPage) return;
+        readerTranslatedPage.innerHTML = `
+            <div class="translated-page-placeholder${isError ? ' error' : ''}">
+                ${escapeHtmlGlobal(message)}
+            </div>`;
+    }
+
+    async function renderTranslatedReaderPage(pageNum) {
+        if (!readerTranslatedPage || readerState.readerMode === 'original') {
+            if (readerTranslatedPage) readerTranslatedPage.classList.add('hidden');
+            return;
+        }
+
+        readerTranslatedPage.classList.remove('hidden');
+        readerTranslatedPage.style.width = `${pdfCanvas.width || 820}px`;
+        readerTranslatedPage.style.minHeight = `${pdfCanvas.height || 1120}px`;
+
+        const cacheKey = `${readerState.paperId || 'paper'}:${pageNum}`;
+        if (readerState.pageTranslationCache[cacheKey]) {
+            renderTranslatedPageContent(readerState.pageTranslationCache[cacheKey], pageNum);
+            return;
+        }
+
+        setTranslatedPageMessage('正在生成当前页译文...');
+        try {
+            const sourceText = await getCurrentPageText();
+            if (!sourceText) throw new Error('当前页没有可提取文本，可能是扫描版 PDF。');
+            const data = await requestReaderTranslation(sourceText.slice(0, 12000));
+            const translated = data.translated_text || '';
+            readerState.pageTranslationCache[cacheKey] = translated;
+            renderTranslatedPageContent(translated, pageNum);
+            setReaderTranslationStatus(`当前页译文已生成 · ${data.model || 'translator'}`);
+        } catch (error) {
+            setTranslatedPageMessage(error.message, true);
+            setReaderTranslationStatus(error.message, true);
+        }
+    }
+
+    async function setReaderMode(mode) {
+        readerState.readerMode = mode;
+        updateReaderModeButtons(Boolean(readerState.pdfDoc));
+        if (mode === 'original') {
+            if (readerTranslatedPage) readerTranslatedPage.classList.add('hidden');
+            return;
+        }
+        await renderTranslatedReaderPage(readerState.pageNum);
+    }
+
     async function fillReaderTranslationFromPage() {
         if (!readerTranslateSource || !readerUsePageTextBtn) return;
         readerUsePageTextBtn.disabled = true;
@@ -545,6 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pdfCanvas.height = Math.floor(viewport.height);
             clearReaderCanvas();
             await page.render({ canvasContext: context, viewport }).promise;
+            await renderTranslatedReaderPage(pageNum);
         } catch (error) {
             console.error('PDF page render failed:', error);
             readerState.renderError = `Page render failed: ${error.message}`;
@@ -686,6 +802,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (readerRetryTranslateBtn) {
         readerRetryTranslateBtn.addEventListener('click', () => translateReaderText(readerState.lastTranslateSource));
+    }
+    if (readerOriginalModeBtn) {
+        readerOriginalModeBtn.addEventListener('click', () => setReaderMode('original'));
+    }
+    if (readerTranslatedModeBtn) {
+        readerTranslatedModeBtn.addEventListener('click', () => setReaderMode('translated'));
+    }
+    if (readerBilingualModeBtn) {
+        readerBilingualModeBtn.addEventListener('click', () => setReaderMode('bilingual'));
     }
     updateReaderControls();
 

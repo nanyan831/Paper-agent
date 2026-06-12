@@ -190,10 +190,20 @@
                                 <button id="readerZoomInBtn" class="reader-btn" title="Zoom in">
                                     <i class="fa-solid fa-magnifying-glass-plus"></i>
                                 </button>
+                                <div class="reader-mode-toggle" aria-label="Reader mode">
+                                    <button id="readerOriginalModeBtn" class="reader-mode-btn active" type="button">原文</button>
+                                    <button id="readerTranslatedModeBtn" class="reader-mode-btn" type="button">译文</button>
+                                    <button id="readerBilingualModeBtn" class="reader-mode-btn" type="button">对照</button>
+                                </div>
                             </div>
                         </div>
                         <div class="pdf-canvas-wrap">
-                            <canvas id="pdfCanvas"></canvas>
+                            <div class="pdf-page-shell">
+                                <canvas id="pdfCanvas"></canvas>
+                            </div>
+                            <article id="readerTranslatedPage" class="reader-translated-page hidden" aria-live="polite">
+                                <div class="translated-page-placeholder">切换到译文模式后，会把当前页渲染成中文阅读页。</div>
+                            </article>
                         </div>
                     </div>
                     <aside class="reader-sidebar">
@@ -335,6 +345,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/js/app.js?v=reader-evidence-4"></script>
+    <script src="/js/app.js?v=reader-translation-page-1"></script>
 </body>
 </html>
