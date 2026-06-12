@@ -229,6 +229,29 @@
                             </div>
                             <div id="readerTranslateStatus" class="translation-status"></div>
                         </div>
+                        <div class="reader-evidence-panel">
+                            <div class="reader-evidence-head">
+                                <h3>查出处 / 查证据</h3>
+                                <p>在阅读时直接定位原文证据。</p>
+                            </div>
+                            <div class="reader-evidence-scope" role="radiogroup" aria-label="查找范围">
+                                <label>
+                                    <input type="radio" name="readerEvidenceScope" value="current" checked>
+                                    当前论文
+                                </label>
+                                <label>
+                                    <input type="radio" name="readerEvidenceScope" value="all">
+                                    全部资料库
+                                </label>
+                            </div>
+                            <textarea id="readerEvidenceInput" rows="3" placeholder="输入一句观点或问题，例如：这个方法如何减少幻觉？"></textarea>
+                            <button id="readerEvidenceBtn" class="primary-btn reader-evidence-btn">
+                                <i class="fa-solid fa-magnifying-glass-location"></i> 查找证据
+                            </button>
+                            <div id="readerEvidenceResults" class="reader-evidence-results">
+                                <p class="reader-empty">输入观点后，结果会显示原文片段和页码。</p>
+                            </div>
+                        </div>
                         <div id="readerChunks" class="reader-chunks" hidden aria-hidden="true">
                             <p class="reader-empty">Open a PDF to inspect its chunks.</p>
                         </div>
@@ -312,6 +335,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/js/app.js"></script>
+    <script src="/js/app.js?v=reader-evidence-4"></script>
 </body>
 </html>

@@ -349,6 +349,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function scrollReaderIntoView() {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.scrollTop = 0;
+    }
+
     function resetReaderState() {
         readerState.paperId = null;
         readerState.paper = null;
@@ -391,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isCurrentPaper = source.paperId && source.paperId === readerState.paperId;
             const jumpLabel = isCurrentPaper ? '跳到本页' : '打开原文';
             return `
-                <button class="reader-evidence-card" data-paper-id="${escapeHtmlGlobal(source.paperId)}" data-page="${source.pageStart}" ${source.canJump ? '' : 'disabled'}>
+                <button class="reader-evidence-card" data-paper-id="${escapeHtmlGlobal(source.paperId)}" data-page="${source.pageStart}" ${source.canJump ? `onclick="window.openPdfReader('${escapeHtmlGlobal(source.paperId)}', ${source.pageStart})"` : 'disabled'}>
                     <span class="reader-evidence-rank">${index + 1}</span>
                     <span class="reader-evidence-body">
                         <strong>${escapeHtmlGlobal(source.title)}</strong>
@@ -597,11 +602,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetPage = Math.max(parseInt(page, 10) || 1, 1);
         if (readerState.pdfDoc && readerState.paperId === paperId) {
             showView('reader', false);
+            scrollReaderIntoView();
             await queuePdfPage(targetPage);
             return;
         }
         readerState.returnView = document.querySelector('.view-section:not(.hidden)')?.id?.replace('view-', '') || 'search';
         showView('reader', false);
+        scrollReaderIntoView();
         readerTitle.textContent = 'Loading PDF...';
         readerStatus.textContent = 'Preparing reader';
         if (readerChunks) readerChunks.innerHTML = '';
@@ -668,20 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 lookupReaderEvidence();
-            }
-        });
-    }
-    if (readerEvidenceResults) {
-        readerEvidenceResults.addEventListener('click', (event) => {
-            const card = event.target.closest('.reader-evidence-card[data-paper-id]');
-            if (!card) return;
-            event.preventDefault();
-            const paperId = card.dataset.paperId;
-            const page = Number(card.dataset.page || 1);
-            if (paperId === readerState.paperId) {
-                queuePdfPage(page);
-            } else {
-                window.openPdfReader(paperId, page);
             }
         });
     }
