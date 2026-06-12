@@ -131,6 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
         pageTextCache: {},
         pageTranslationCache: {},
         readerMode: 'original',
+        readerExpanded: false,
+        translationCollapsed: false,
         lastTranslateSource: '',
         returnView: 'search'
     };
@@ -154,11 +156,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const readerNextBtn = document.getElementById('readerNextBtn');
     const readerZoomOutBtn = document.getElementById('readerZoomOutBtn');
     const readerZoomInBtn = document.getElementById('readerZoomInBtn');
+    const readerExpandPdfBtn = document.getElementById('readerExpandPdfBtn');
     const readerOriginalModeBtn = document.getElementById('readerOriginalModeBtn');
     const readerTranslatedModeBtn = document.getElementById('readerTranslatedModeBtn');
     const readerBilingualModeBtn = document.getElementById('readerBilingualModeBtn');
     const readerTranslatedPage = document.getElementById('readerTranslatedPage');
     const pdfCanvasWrap = document.querySelector('.pdf-canvas-wrap');
+    const readerLayout = document.querySelector('.reader-layout');
+    const readerTranslationPanel = document.querySelector('.reader-translation-panel');
+    const readerToggleTranslationBtn = document.getElementById('readerToggleTranslationBtn');
 
     if (window.pdfjsLib) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -175,6 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
         readerZoomOutBtn.disabled = !total || readerState.scale <= 0.6;
         readerZoomInBtn.disabled = !total || readerState.scale >= 2.4;
         updateReaderModeButtons(Boolean(total));
+        updateReaderExpansion(Boolean(total));
+        updateTranslationCollapse();
         if (readerState.renderError) {
             readerStatus.textContent = readerState.renderError;
         } else if (total) {
@@ -200,6 +208,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (pdfCanvasWrap) {
             pdfCanvasWrap.dataset.mode = readerState.readerMode;
+        }
+    }
+
+    function updateReaderExpansion(enabled = true) {
+        if (readerLayout) {
+            readerLayout.classList.toggle('reader-expanded', readerState.readerExpanded);
+        }
+        if (readerExpandPdfBtn) {
+            readerExpandPdfBtn.disabled = !enabled;
+            readerExpandPdfBtn.title = readerState.readerExpanded ? '还原工具栏' : '展开阅读区';
+            readerExpandPdfBtn.innerHTML = readerState.readerExpanded
+                ? '<i class="fa-solid fa-compress"></i>'
+                : '<i class="fa-solid fa-expand"></i>';
+        }
+    }
+
+    function updateTranslationCollapse() {
+        if (readerTranslationPanel) {
+            readerTranslationPanel.classList.toggle('collapsed', readerState.translationCollapsed);
+        }
+        if (readerToggleTranslationBtn) {
+            readerToggleTranslationBtn.title = readerState.translationCollapsed ? '展开翻译器' : '最小化翻译器';
+            readerToggleTranslationBtn.innerHTML = readerState.translationCollapsed
+                ? '<i class="fa-solid fa-up-right-and-down-left-from-center"></i>'
+                : '<i class="fa-solid fa-window-minimize"></i>';
         }
     }
 
@@ -391,6 +424,8 @@ document.addEventListener('DOMContentLoaded', () => {
         readerState.pageTextCache = {};
         readerState.pageTranslationCache = {};
         readerState.readerMode = 'original';
+        readerState.readerExpanded = false;
+        readerState.translationCollapsed = false;
         clearTranslatedPage();
         clearReaderCanvas();
         updateReaderControls();
@@ -802,6 +837,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (readerRetryTranslateBtn) {
         readerRetryTranslateBtn.addEventListener('click', () => translateReaderText(readerState.lastTranslateSource));
+    }
+    if (readerExpandPdfBtn) {
+        readerExpandPdfBtn.addEventListener('click', () => {
+            readerState.readerExpanded = !readerState.readerExpanded;
+            updateReaderExpansion();
+        });
+    }
+    if (readerToggleTranslationBtn) {
+        readerToggleTranslationBtn.addEventListener('click', () => {
+            readerState.translationCollapsed = !readerState.translationCollapsed;
+            updateTranslationCollapse();
+        });
     }
     if (readerOriginalModeBtn) {
         readerOriginalModeBtn.addEventListener('click', () => setReaderMode('original'));

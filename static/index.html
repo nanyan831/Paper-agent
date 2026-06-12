@@ -195,6 +195,9 @@
                                     <button id="readerTranslatedModeBtn" class="reader-mode-btn" type="button">译文</button>
                                     <button id="readerBilingualModeBtn" class="reader-mode-btn" type="button">对照</button>
                                 </div>
+                                <button id="readerExpandPdfBtn" class="reader-btn" title="展开阅读区">
+                                    <i class="fa-solid fa-expand"></i>
+                                </button>
                             </div>
                         </div>
                         <div class="pdf-canvas-wrap">
@@ -213,9 +216,14 @@
                                     <h3>阅读翻译器</h3>
                                     <p>中英 / 中文对照</p>
                                 </div>
-                                <button id="readerUsePageTextBtn" class="reader-btn text-reader-btn" title="Use current page text">
-                                    <i class="fa-solid fa-file-lines"></i>
-                                </button>
+                                <div class="translation-header-actions">
+                                    <button id="readerUsePageTextBtn" class="reader-btn text-reader-btn" title="Use current page text">
+                                        <i class="fa-solid fa-file-lines"></i>
+                                    </button>
+                                    <button id="readerToggleTranslationBtn" class="reader-btn" title="最小化翻译器">
+                                        <i class="fa-solid fa-window-minimize"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="translation-columns">
                                 <label class="translation-pane">
@@ -345,6 +353,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/js/app.js?v=reader-translation-page-1"></script>
+    <script src="/js/app.js?v=reader-expandable-translation-1"></script>
 </body>
 </html>

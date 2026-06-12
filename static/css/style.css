@@ -1026,6 +1026,14 @@ body {
     height: calc(100vh - 80px);
 }
 
+.reader-layout.reader-expanded {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.reader-layout.reader-expanded .reader-sidebar {
+    display: none;
+}
+
 .reader-main,
 .reader-sidebar {
     min-height: 0;
@@ -1259,11 +1267,28 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
+.reader-translation-panel.collapsed {
+    gap: 0;
+    padding-bottom: 12px;
+}
+
+.reader-translation-panel.collapsed .translation-columns,
+.reader-translation-panel.collapsed .translation-actions,
+.reader-translation-panel.collapsed .translation-status {
+    display: none;
+}
+
 .translation-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+}
+
+.translation-header-actions {
+    flex: 0 0 auto;
+    display: inline-flex;
+    gap: 8px;
 }
 
 .translation-header p,
