@@ -881,6 +881,11 @@ body {
     text-align: center;
 }
 
+.usage-today-card {
+    border-color: rgba(99, 102, 241, 0.32);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.1), rgba(15, 17, 21, 0.74));
+}
+
 .stat-value {
     font-size: 36px;
     font-weight: 600;
@@ -1497,6 +1502,48 @@ body {
     color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.45;
+}
+
+.quality-badge,
+.source-confidence {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    gap: 5px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.quality-badge.good,
+.source-confidence.high {
+    color: #86efac;
+    background: rgba(34, 197, 94, 0.13);
+    border: 1px solid rgba(34, 197, 94, 0.28);
+}
+
+.quality-badge.warning,
+.source-confidence.medium,
+.source-confidence.unknown {
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.13);
+    border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.quality-badge.failed,
+.source-confidence.low {
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.13);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.import-result-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .reader-evidence-jump {

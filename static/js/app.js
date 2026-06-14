@@ -252,6 +252,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const chunkCount = Number(paper.chunk_count || 0);
             const pageCount = Number(paper.page_count || 0);
             const needsOcrHint = pageCount === 0 || chunkCount === 0;
+            const quality = getImportQuality({
+                success: true,
+                pages: pageCount,
+                chunks: chunkCount,
+                text_chars: chunkCount ? chunkCount * 2600 : 0,
+                quality_warnings: needsOcrHint ? ['low_quality'] : []
+            });
             return `
                 <article class="recent-pdf-card${needsOcrHint ? ' has-quality-warning' : ''}">
                     <div class="recent-pdf-main">
@@ -261,6 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${pageCount ? `<span><i class="fa-regular fa-file-lines"></i> ${pageCount} 页</span>` : ''}
                             <span><i class="fa-solid fa-layer-group"></i> ${chunkCount} 个片段</span>
                             <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlGlobal(paper.parse_status || 'unknown')}</span>
+                            <span class="quality-badge ${quality.level}"><i class="fa-solid ${quality.icon}"></i> ${quality.label}</span>
                         </div>
                         ${needsOcrHint ? '<div class="quality-warning"><i class="fa-solid fa-triangle-exclamation"></i> 可能是扫描版/不可检索，需要 OCR 或换 PDF</div>' : ''}
                     </div>
@@ -299,12 +307,44 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${text.slice(0, maxChars).trim()}...`;
     }
 
+    function normalizeConfidence(value) {
+        const confidence = String(value || 'unknown').toLowerCase();
+        if (['high', 'medium', 'low'].includes(confidence)) return confidence;
+        return 'unknown';
+    }
+
+    function confidenceLabel(value) {
+        const labels = {
+            high: '高可信',
+            medium: '中可信',
+            low: '低可信',
+            unknown: '待核验'
+        };
+        return labels[normalizeConfidence(value)];
+    }
+
+    function getImportQuality(item) {
+        if (!item || !item.success) {
+            return { level: 'failed', label: '导入失败', icon: 'fa-circle-xmark' };
+        }
+        const warnings = item.quality_warnings || [];
+        const pages = Number(item.pages || 0);
+        const chunks = Number(item.chunks || 0);
+        const textChars = Number(item.text_chars || 0);
+        if (!pages || !chunks || textChars < 800 || warnings.length) {
+            return { level: 'warning', label: '需 OCR / 低质量', icon: 'fa-triangle-exclamation' };
+        }
+        return { level: 'good', label: '可检索', icon: 'fa-circle-check' };
+    }
+
     function normalizeSourceItem(source) {
         const item = source || {};
+        const evidence = item.evidence || {};
         const pageStart = parseSourcePage(item.page_start ?? item.page ?? item.pageStart ?? item.page_end, 1);
         const pageEnd = Math.max(parseSourcePage(item.page_end, pageStart), pageStart);
         const paperId = String(item.paper_id || item.paperId || '').trim();
         const snippet = truncateSourceText(item.snippet || item.content || '', 260);
+        const confidence = normalizeConfidence(evidence.confidence || item.confidence);
         return {
             paperId,
             canJump: Boolean(paperId),
@@ -316,7 +356,9 @@ document.addEventListener('DOMContentLoaded', () => {
             snippet,
             authors: item.authors || '',
             source: item.source || 'local_pdf',
-            searchType: item.search_type || ''
+            searchType: item.search_type || evidence.search_type || '',
+            confidence,
+            confidenceLabel: confidenceLabel(confidence)
         };
     }
 
@@ -471,6 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="reader-evidence-body">
                         <strong>${escapeHtmlGlobal(source.title)}</strong>
                         <em>${escapeHtmlGlobal(source.pageLabelZh)}</em>
+                        <span class="source-confidence ${escapeHtmlGlobal(source.confidence)}">${escapeHtmlGlobal(source.confidenceLabel)}</span>
                         <small>${escapeHtmlGlobal(source.snippet || '暂无原文片段。')}</small>
                     </span>
                     <span class="reader-evidence-jump">${source.canJump ? jumpLabel : '无法跳转'}</span>
@@ -997,7 +1040,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const resultRows = (data.results || []).map(item => `
                 <div class="import-result-item ${item.success ? 'success' : 'failed'}">
                     <div>
-                        <strong>${escapeHtmlGlobal(item.title || item.filename || '未命名 PDF')}</strong>
+                        <div class="import-result-title">
+                            <strong>${escapeHtmlGlobal(item.title || item.filename || '未命名 PDF')}</strong>
+                            <span class="quality-badge ${getImportQuality(item).level}">
+                                <i class="fa-solid ${getImportQuality(item).icon}"></i> ${getImportQuality(item).label}
+                            </span>
+                        </div>
                         <p>${item.success
                             ? `页数：${item.pages} · 全文片段：${item.chunks} · 文本字数：${item.text_chars || 0} · 状态：${escapeHtmlGlobal(item.parse_status || 'unknown')}`
                             : `失败原因：${escapeHtmlGlobal(item.error || '未知错误')}`}</p>
@@ -1044,7 +1092,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/stats');
             const stats = await res.json();
             const usage = stats.agent_usage || {};
+            const todayUsage = usage.today || {};
             const formatNumber = (value) => Number(value || 0).toLocaleString();
+            const estimateDeepSeekUsd = (inputTokens = 0, outputTokens = 0) => {
+                const inputCost = Number(inputTokens || 0) / 1000000 * 0.14;
+                const outputCost = Number(outputTokens || 0) / 1000000 * 0.28;
+                return inputCost + outputCost;
+            };
+            const formatUsd = (value) => `$${Number(value || 0).toFixed(4)}`;
             const escapeHtml = (value) => String(value || '')
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -1107,6 +1162,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="stat-card">
                     <div class="stat-value" style="color: #f97316;">${formatNumber(usage.total_tokens)}</div>
                     <div class="stat-label">累计 Token</div>
+                </div>
+                <div class="stat-card usage-today-card">
+                    <div class="stat-value" style="color: #22c55e;">${formatNumber(todayUsage.total_tokens)}</div>
+                    <div class="stat-label">今日 Token</div>
+                </div>
+                <div class="stat-card usage-today-card">
+                    <div class="stat-value" style="color: #a78bfa;">${formatUsd(estimateDeepSeekUsd(todayUsage.input_tokens, todayUsage.output_tokens))}</div>
+                    <div class="stat-label">今日估算成本</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value">${formatNumber(usage.input_tokens)}</div>
@@ -1306,6 +1369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="source-body">
                         <strong>${escapeHtmlGlobal(item.title)}</strong>
                         <em>${escapeHtmlGlobal(item.pageLabel)}</em>
+                        <span class="source-confidence ${escapeHtmlGlobal(item.confidence)}">${escapeHtmlGlobal(item.confidenceLabel)}</span>
                         ${item.snippet ? `<small>${escapeHtmlGlobal(item.snippet)}</small>` : ''}
                     </span>
                     ${item.canJump ? '<i class="fa-solid fa-arrow-up-right-from-square"></i>' : ''}

@@ -413,6 +413,18 @@ class DatabaseManager:
             usage_row = await cursor.fetchone()
 
             cursor = await db.execute(
+                """SELECT
+                       COUNT(*) as total_calls,
+                       COALESCE(SUM(input_tokens), 0) as input_tokens,
+                       COALESCE(SUM(output_tokens), 0) as output_tokens,
+                       COALESCE(SUM(total_tokens), 0) as total_tokens,
+                       COALESCE(SUM(tool_calls), 0) as tool_calls
+                   FROM model_usage_logs
+                   WHERE date(created_at, 'localtime') = date('now', 'localtime')"""
+            )
+            today_usage_row = await cursor.fetchone()
+
+            cursor = await db.execute(
                 """SELECT model, COUNT(*) as calls, COALESCE(SUM(total_tokens), 0) as total_tokens
                    FROM model_usage_logs
                    GROUP BY model
@@ -426,7 +438,7 @@ class DatabaseManager:
                    FROM model_usage_logs u
                    LEFT JOIN chat_sessions s ON s.id = u.session_id
                    ORDER BY u.id DESC
-                   LIMIT 10"""
+                   LIMIT 20"""
             )
             recent_usage = [dict(r) for r in await cursor.fetchall()]
 
@@ -436,6 +448,13 @@ class DatabaseManager:
                 "output_tokens": usage_row["output_tokens"],
                 "total_tokens": usage_row["total_tokens"],
                 "tool_calls": usage_row["tool_calls"],
+                "today": {
+                    "total_calls": today_usage_row["total_calls"],
+                    "input_tokens": today_usage_row["input_tokens"],
+                    "output_tokens": today_usage_row["output_tokens"],
+                    "total_tokens": today_usage_row["total_tokens"],
+                    "tool_calls": today_usage_row["tool_calls"],
+                },
                 "by_model": usage_by_model,
                 "recent": recent_usage,
             }
