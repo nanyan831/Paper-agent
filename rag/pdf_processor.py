@@ -16,8 +16,7 @@ def extract_pdf_pages(file_path: str | Path) -> list[dict]:
     for index, page in enumerate(reader.pages, start=1):
         text = page.extract_text() or ""
         text = normalize_text(text)
-        if text:
-            pages.append({"page": index, "text": text})
+        pages.append({"page": index, "text": text})
     return pages
 
 

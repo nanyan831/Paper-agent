@@ -256,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 success: true,
                 pages: pageCount,
                 chunks: chunkCount,
-                text_chars: chunkCount ? chunkCount * 2600 : 0,
+                text_chars: paper.text_chars || 0,
                 quality_warnings: needsOcrHint ? ['low_quality'] : []
             });
             return `
@@ -315,9 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function confidenceLabel(value) {
         const labels = {
-            high: '高可信',
-            medium: '中可信',
-            low: '低可信',
+            high: '证据强',
+            medium: '证据中',
+            low: '证据弱',
             unknown: '待核验'
         };
         return labels[normalizeConfidence(value)];
@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="reader-evidence-body">
                         <strong>${escapeHtmlGlobal(source.title)}</strong>
                         <em>${escapeHtmlGlobal(source.pageLabelZh)}</em>
-                        <span class="source-confidence ${escapeHtmlGlobal(source.confidence)}">${escapeHtmlGlobal(source.confidenceLabel)}</span>
+                        <span class="source-confidence ${escapeHtmlGlobal(source.confidence)}" title="基于本地检索分数的证据强度提示，不代表结论已被自动事实验证。">${escapeHtmlGlobal(source.confidenceLabel)}</span>
                         <small>${escapeHtmlGlobal(source.snippet || '暂无原文片段。')}</small>
                     </span>
                     <span class="reader-evidence-jump">${source.canJump ? jumpLabel : '无法跳转'}</span>
@@ -1093,10 +1093,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const stats = await res.json();
             const usage = stats.agent_usage || {};
             const todayUsage = usage.today || {};
+            const pricing = usage.pricing || {};
             const formatNumber = (value) => Number(value || 0).toLocaleString();
             const estimateDeepSeekUsd = (inputTokens = 0, outputTokens = 0) => {
-                const inputCost = Number(inputTokens || 0) / 1000000 * 0.14;
-                const outputCost = Number(outputTokens || 0) / 1000000 * 0.28;
+                const inputRate = Number(pricing.input_per_million ?? 0.14);
+                const outputRate = Number(pricing.output_per_million ?? 0.28);
+                const inputCost = Number(inputTokens || 0) / 1000000 * inputRate;
+                const outputCost = Number(outputTokens || 0) / 1000000 * outputRate;
                 return inputCost + outputCost;
             };
             const formatUsd = (value) => `$${Number(value || 0).toFixed(4)}`;
@@ -1181,8 +1184,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="usage-panel">
                     <div class="usage-panel-header">
-                        <h3>最近 Agent 调用</h3>
-                        <span>工具调用 ${formatNumber(usage.tool_calls)} 次</span>
+                        <h3>最近模型调用</h3>
+                        <span>工具调用 ${formatNumber(usage.tool_calls)} 次 · 成本为本地估算，非账单金额</span>
                     </div>
                     <div class="usage-table-wrap">
                         <table class="usage-table">
@@ -1369,7 +1372,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="source-body">
                         <strong>${escapeHtmlGlobal(item.title)}</strong>
                         <em>${escapeHtmlGlobal(item.pageLabel)}</em>
-                        <span class="source-confidence ${escapeHtmlGlobal(item.confidence)}">${escapeHtmlGlobal(item.confidenceLabel)}</span>
+                        <span class="source-confidence ${escapeHtmlGlobal(item.confidence)}" title="基于本地检索分数的证据强度提示，不代表结论已被自动事实验证。">${escapeHtmlGlobal(item.confidenceLabel)}</span>
                         ${item.snippet ? `<small>${escapeHtmlGlobal(item.snippet)}</small>` : ''}
                     </span>
                     ${item.canJump ? '<i class="fa-solid fa-arrow-up-right-from-square"></i>' : ''}

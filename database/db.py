@@ -140,6 +140,7 @@ class DatabaseManager:
                 f"""SELECT p.id, p.title, p.authors, p.abstract, p.keywords, p.url, p.doi, p.source,
                            p.publish_date, p.journal, p.language, p.citation_count,
                            p.is_favorited, p.file_path, p.parse_status, p.created_at,
+                           LENGTH(COALESCE(p.full_text, '')) as text_chars,
                            COUNT(c.id) as chunk_count,
                            COALESCE(MAX(c.page_end), MAX(c.page_start), 0) as page_count
                     FROM papers p
@@ -437,7 +438,7 @@ class DatabaseManager:
                           u.output_tokens, u.total_tokens, u.tool_calls, u.created_at
                    FROM model_usage_logs u
                    LEFT JOIN chat_sessions s ON s.id = u.session_id
-                   ORDER BY u.id DESC
+                   ORDER BY u.created_at DESC, u.id DESC
                    LIMIT 20"""
             )
             recent_usage = [dict(r) for r in await cursor.fetchall()]
@@ -448,6 +449,14 @@ class DatabaseManager:
                 "output_tokens": usage_row["output_tokens"],
                 "total_tokens": usage_row["total_tokens"],
                 "tool_calls": usage_row["tool_calls"],
+                "pricing": {
+                    "currency": "USD",
+                    "estimate_only": True,
+                    "pricing_source": "manual_config",
+                    "input_per_million": 0.14,
+                    "output_per_million": 0.28,
+                    "note": "Rough local estimate; provider billing is authoritative.",
+                },
                 "today": {
                     "total_calls": today_usage_row["total_calls"],
                     "input_tokens": today_usage_row["input_tokens"],

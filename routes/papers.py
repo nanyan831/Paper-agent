@@ -51,6 +51,7 @@ async def _import_pdf_upload(
         raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {e}")
 
     full_text = "\n\n".join(page["text"] for page in pages)
+    text_pages = sum(1 for page in pages if (page.get("text") or "").strip())
     text_chars = len(full_text.strip())
     resolved_title = title or Path(filename).stem
     paper = build_pdf_paper(
@@ -80,6 +81,7 @@ async def _import_pdf_upload(
         "title": resolved_title,
         "parse_status": paper["parse_status"],
         "pages": len(pages),
+        "text_pages": text_pages,
         "chunks": len(chunks),
         "text_chars": text_chars,
         "quality_warnings": _build_import_quality_warnings(len(pages), len(chunks), text_chars),

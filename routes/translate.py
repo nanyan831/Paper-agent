@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
@@ -29,14 +29,14 @@ def _api_key_ready() -> bool:
 
 
 @router.post("", response_model=TranslateResponse)
-async def translate_text(payload: TranslateRequest) -> TranslateResponse:
+async def translate_text(payload: TranslateRequest, request: Request) -> TranslateResponse:
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text to translate cannot be empty.")
     if not _api_key_ready():
         raise HTTPException(
             status_code=503,
-            detail="Translation is unavailable because DEEPSEEK_API_KEY is not configured.",
+            detail="翻译功能暂不可用：请在本地 .env 配置 DEEPSEEK_API_KEY，然后重启服务。",
         )
 
     client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
@@ -73,6 +73,22 @@ async def translate_text(payload: TranslateRequest) -> TranslateResponse:
     translated = (response.choices[0].message.content or "").strip()
     if not translated:
         raise HTTPException(status_code=502, detail="Translation service returned an empty response.")
+
+    usage = getattr(response, "usage", None)
+    input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0) if usage else max(1, len(text) // 4)
+    output_tokens = int(getattr(usage, "completion_tokens", 0) or 0) if usage else max(1, len(translated) // 4)
+    total_tokens = int(getattr(usage, "total_tokens", 0) or 0) if usage else input_tokens + output_tokens
+    try:
+        await request.app.state.db.record_model_usage(
+            session_id=None,
+            model=DEEPSEEK_MODEL,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            tool_calls=0,
+        )
+    except Exception as exc:
+        logger.warning("Failed to record translation usage: %s", exc)
 
     return TranslateResponse(
         translated_text=translated,

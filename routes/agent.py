@@ -157,11 +157,12 @@ def _normalize_source(hit: dict) -> dict:
     search_score = hit.get("search_score")
     search_type = hit.get("search_type")
     chunk_index = hit.get("chunk_index")
+    has_page = bool(hit.get("page_start") or hit.get("page_end"))
     evidence = {
         "search_score": search_score,
         "search_type": search_type,
         "chunk_index": chunk_index,
-        "confidence": _evidence_confidence(search_score, search_type),
+        "confidence": _evidence_confidence(search_score, search_type, has_page=has_page),
     }
     return {
         "paper_id": hit.get("paper_id"),
@@ -177,7 +178,7 @@ def _normalize_source(hit: dict) -> dict:
     }
 
 
-def _evidence_confidence(search_score: Any, search_type: Optional[str]) -> str:
+def _evidence_confidence(search_score: Any, search_type: Optional[str], has_page: bool = False) -> str:
     if search_score is None:
         return "unknown"
     try:
@@ -186,8 +187,16 @@ def _evidence_confidence(search_score: Any, search_type: Optional[str]) -> str:
         return "unknown"
     if score <= 0:
         return "low"
-    if (search_type or "").startswith("hybrid") and score < LOW_SCORE_THRESHOLD:
+    normalized_type = search_type or ""
+    if normalized_type.startswith("hybrid") and score < LOW_SCORE_THRESHOLD:
         return "low"
+    if has_page:
+        if normalized_type.startswith("semantic") and score >= 0.25:
+            return "high"
+        if normalized_type.startswith("hybrid") and score >= 0.05:
+            return "high"
+        if normalized_type.startswith("keyword") and score >= 1:
+            return "high"
     return "medium"
 
 
