@@ -1,4 +1,4 @@
-﻿# Paper Agent 使用说明
+# Paper Agent 使用说明
 
 Paper Agent 是一个本地论文记忆库和 RAG 学术助手。它可以抓取论文元数据、导入本地 PDF、把论文切块写入向量库，并通过 AI 对话检索本地全文片段回答问题。
 
@@ -293,6 +293,24 @@ docs/mvp_trial_checklist.md
 本地真实 `.env` 只放自己的 key，不提交。远程仓库只提交 `.env.example`。
 
 ## 开发检查命令
+
+### MVP 自检
+
+启动服务后运行以下命令，验证核心功能是否正常：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\mvp_smoke.py --api-url http://127.0.0.1:8000
+```
+
+该脚本会检查：
+
+- **readiness**：服务是否就绪
+- **静态资源**：前端页面是否可访问
+- **stats**：数据概览接口是否正常
+- **检索**：chunk 检索功能是否工作
+- **PDF source jump**：PDF 来源跳转功能是否正常
+
+**重要**：此脚本不调用 DeepSeek，不消耗任何 token，纯本地验证。
 
 ```powershell
 .\.venv\Scripts\python.exe -m compileall agent agent_tools crawlers database rag routes scheduler main.py config.py
