@@ -313,6 +313,14 @@ docs/mvp_trial_checklist.md
 
 **重要**：此脚本不调用 DeepSeek，不消耗任何 token，纯本地验证。
 
+RAG 证据链自检：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\rag_quality_check.py --api-url http://127.0.0.1:8000
+```
+
+该脚本不调用 DeepSeek，不消耗 token，用于检查 chunk 检索是否能返回 `paper_id`、标题、页码和全文片段。
+
 ```powershell
 .\.venv\Scripts\python.exe -m compileall agent agent_tools crawlers database rag routes scheduler main.py config.py
 node --check static\js\app.js
