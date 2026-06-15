@@ -245,6 +245,25 @@ body {
     background: #ef4444;
 }
 
+.readiness-warning {
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.readiness-warning i {
+    color: #f59e0b;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
 /* 搜索页 */
 .search-header {
     text-align: center;

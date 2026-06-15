@@ -1,4 +1,5 @@
 import logging
+import threading
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from database.db import DatabaseManager
 from database.models import init_database
 from rag.vector_store import VectorStore
 from rag.retriever import HybridRetriever
+from rag.embedder import warmup_embedding_model
 from crawlers.manager import CrawlerManager
 from agent_tools.tools import init_tools_dependencies
 from scheduler.jobs import start_scheduler, stop_scheduler
@@ -46,7 +48,10 @@ async def lifespan(app: FastAPI):
     
     # 5. 启动定时任务
     start_scheduler(crawler_manager)
-    
+
+    # 6. 后台预热嵌入模型（不阻塞服务启动）
+    threading.Thread(target=warmup_embedding_model, daemon=True, name="embedding-warmup").start()
+
     yield
     
     # 清理资源

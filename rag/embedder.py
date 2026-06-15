@@ -2,6 +2,8 @@
 文本嵌入服务 —— 将论文文本转为向量
 """
 import logging
+import threading
+import time
 from typing import Union
 from functools import lru_cache
 
@@ -11,18 +13,58 @@ logger = logging.getLogger(__name__)
 
 # 全局缓存模型实例
 _model = None
+_model_lock = threading.Lock()
+
+# 嵌入模型状态追踪
+_embedding_state = {
+    "status": "not_loaded",
+    "model_name": None,
+    "load_seconds": None,
+    "error": None,
+}
 
 
 def _get_model():
-    """懒加载嵌入模型"""
+    """懒加载嵌入模型（线程安全，更新全局状态）"""
     global _model
-    if _model is None:
+    if _model is not None:
+        return _model
+    with _model_lock:
+        if _model is not None:
+            return _model
         from sentence_transformers import SentenceTransformer
         from config import EMBEDDING_MODEL
+        _embedding_state["status"] = "loading"
+        _embedding_state["model_name"] = EMBEDDING_MODEL
+        _embedding_state["error"] = None
         logger.info(f"正在加载嵌入模型: {EMBEDDING_MODEL}")
-        _model = SentenceTransformer(EMBEDDING_MODEL)
-        logger.info("嵌入模型加载完成")
-    return _model
+        t0 = time.monotonic()
+        try:
+            _model = SentenceTransformer(EMBEDDING_MODEL)
+            _embedding_state["status"] = "ready"
+            _embedding_state["load_seconds"] = round(time.monotonic() - t0, 2)
+            logger.info("嵌入模型加载完成")
+        except Exception as exc:
+            _embedding_state["status"] = "error"
+            _embedding_state["error"] = str(exc)
+            _embedding_state["load_seconds"] = round(time.monotonic() - t0, 2)
+            logger.exception("嵌入模型加载失败")
+            raise
+        return _model
+
+
+def get_embedding_status() -> dict:
+    """返回嵌入模型当前状态的快照"""
+    return dict(_embedding_state)
+
+
+def warmup_embedding_model() -> None:
+    """后台预热：触发模型加载但不做大量 encode"""
+    try:
+        _get_model()
+        logger.info("嵌入模型预热完成")
+    except Exception:
+        logger.exception("嵌入模型预热失败")
 
 
 class EmbeddingService:

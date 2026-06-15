@@ -535,6 +535,16 @@ class DatabaseManager:
                 "action": "Run PDF parsing on uploaded papers",
             })
 
+        from rag.embedder import get_embedding_status
+        emb = get_embedding_status()
+        warnings = []
+        if emb["status"] == "loading":
+            warnings.append(f"Embedding model is loading ({emb.get('model_name', '')}), first search may be slow")
+        elif emb["status"] == "not_loaded":
+            warnings.append("Embedding model has not been loaded yet; first search will trigger download")
+        elif emb["status"] == "error":
+            warnings.append(f"Embedding model failed to load: {emb.get('error', 'unknown error')}")
+
         return {
             "api_key_configured": api_key_configured,
             "local_pdf_count": local_pdf_count,
@@ -542,7 +552,8 @@ class DatabaseManager:
             "chunk_count": chunk_count,
             "status": status,
             "blockers": blockers,
-            "warnings": [],
+            "warnings": warnings,
+            "embedding_model": emb,
         }
 
     # ==================== DOI 存在性检查 ====================

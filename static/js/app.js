@@ -43,6 +43,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchableCount = d.searchable_pdf_count || 0;
         const chunkCount = d.chunk_count || 0;
 
+        let embHtml = '';
+        if (d.embedding_model) {
+            const emb = d.embedding_model;
+            const embStatus = emb.status || 'not_loaded';
+            const embDot = embStatus === 'ready' ? 'ok' : embStatus === 'error' ? 'err' : 'warn';
+            const embLabel = embStatus === 'ready' && emb.model_name ? `向量模型 ${emb.model_name}` : `向量模型 ${embStatus}`;
+            embHtml = `<span class="readiness-metric"><span class="metric-dot ${embDot}"></span> ${escapeHtmlGlobal(embLabel)}</span>`;
+        }
+
+        let warnHtml = '';
+        if (Array.isArray(d.warnings) && d.warnings.length) {
+            warnHtml = `<div class="readiness-warning"><i class="fa-solid fa-circle-info"></i> ${escapeHtmlGlobal(d.warnings[0])}</div>`;
+        }
+
         readinessBanner.className = `readiness-banner ${data.status}`;
         readinessBanner.innerHTML = `
             <span class="readiness-status">
@@ -54,7 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="readiness-metric"><span class="metric-dot ${pdfCount > 0 ? 'ok' : 'warn'}"></span> 本地 PDF ${pdfCount}</span>
                 <span class="readiness-metric"><span class="metric-dot ${searchableCount > 0 ? 'ok' : 'warn'}"></span> 可检索 ${searchableCount}</span>
                 <span class="readiness-metric"><span class="metric-dot ${chunkCount > 0 ? 'ok' : 'warn'}"></span> 全文 chunk ${chunkCount}</span>
+                ${embHtml}
             </span>
+            ${warnHtml}
         `;
     }
 
