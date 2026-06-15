@@ -74,7 +74,49 @@ def check_readiness(api_url: str) -> tuple[bool, dict[str, Any]]:
         print(f"  status             : {data['status']}")
         print(f"  blockers           : {data['blockers']}")
         print(f"  warnings           : {data['warnings']}")
-        return True, data
+
+        _all_ok = True
+
+        if "embedding_model" in data:
+            em = data["embedding_model"]
+            em_status = em.get("status")
+            valid_statuses = {"not_loaded", "loading", "ready", "error"}
+            em_ok = isinstance(em, dict) and em_status in valid_statuses
+            _check(f"embedding_model.status in {valid_statuses}", em_ok)
+            if not em_ok:
+                _all_ok = False
+            print(f"  embedding_model.status       : {em.get('status', '<missing>')}")
+            print(f"  embedding_model.model_name   : {em.get('model_name', '<missing>')}")
+            print(f"  embedding_model.load_seconds : {em.get('load_seconds', '<missing>')}")
+
+        if "token_budget" in data:
+            tb = data["token_budget"]
+            tb_keys = {"enabled", "budget", "used", "remaining", "exceeded"}
+            if not isinstance(tb, dict):
+                tb_ok = False
+            else:
+                tb_ok = tb_keys.issubset(tb.keys())
+            _check(f"token_budget has keys {sorted(tb_keys)}", tb_ok)
+            if not tb_ok:
+                _all_ok = False
+            else:
+                enabled = tb["enabled"]
+                exceeded = tb["exceeded"]
+                budget = tb["budget"]
+                used = tb["used"]
+                remaining = tb["remaining"]
+                print(f"  token_budget.enabled  : {enabled}")
+                print(f"  token_budget.budget   : {budget}")
+                print(f"  token_budget.used     : {used}")
+                print(f"  token_budget.remaining: {remaining}")
+                print(f"  token_budget.exceeded : {exceeded}")
+                if enabled and exceeded:
+                    print("  [WARN] token_budget: enabled but exceeded — possible budget guard")
+                    _check("token_budget exceeded (WARN only, not a failure)", True)
+                else:
+                    _check("token_budget OK", True)
+
+        return _all_ok, data
     except Exception as exc:
         _check(f"/api/readiness -> ERROR: {exc}", False)
         return False, {}
