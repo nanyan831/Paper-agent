@@ -1169,6 +1169,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/stats');
             const stats = await res.json();
             const usage = stats.agent_usage || {};
+            const budget = usage.budget || {};
             const todayUsage = usage.today || {};
             const pricing = usage.pricing || {};
             const formatNumber = (value) => Number(value || 0).toLocaleString();
@@ -1180,6 +1181,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return inputCost + outputCost;
             };
             const formatUsd = (value) => `$${Number(value || 0).toFixed(4)}`;
+            const budgetDisplay = budget.enabled === false
+                ? '关闭'
+                : budget.exceeded
+                    ? '0'
+                    : formatNumber(budget.remaining);
+            const budgetLabel = budget.enabled === false
+                ? '今日 Token 预算'
+                : budget.exceeded
+                    ? '今日预算已耗尽'
+                    : '今日剩余额度';
+            const budgetColor = budget.enabled === false
+                ? '#94a3b8'
+                : budget.exceeded
+                    ? '#ef4444'
+                    : '#14b8a6';
             const escapeHtml = (value) => String(value || '')
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -1246,6 +1262,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="stat-card usage-today-card">
                     <div class="stat-value" style="color: #22c55e;">${formatNumber(todayUsage.total_tokens)}</div>
                     <div class="stat-label">今日 Token</div>
+                </div>
+                <div class="stat-card usage-today-card">
+                    <div class="stat-value" style="color: ${budgetColor};">${budgetDisplay}</div>
+                    <div class="stat-label">${budgetLabel}</div>
                 </div>
                 <div class="stat-card usage-today-card">
                     <div class="stat-value" style="color: #a78bfa;">${formatUsd(estimateDeepSeekUsd(todayUsage.input_tokens, todayUsage.output_tokens))}</div>

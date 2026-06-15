@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from config import DB_PATH, DEEPSEEK_API_KEY
+from config import DB_PATH, DEEPSEEK_API_KEY, DAILY_TOKEN_BUDGET
 
 PLACEHOLDER_KEYS = {"", "your-api-key-here", "sk-xxx", "sk-placeholder", "insert_your_key_here"}
 
@@ -466,6 +466,7 @@ class DatabaseManager:
                     "total_tokens": today_usage_row["total_tokens"],
                     "tool_calls": today_usage_row["tool_calls"],
                 },
+                "budget": await self.get_token_budget_status(),
                 "by_model": usage_by_model,
                 "recent": recent_usage,
             }
@@ -545,6 +546,12 @@ class DatabaseManager:
         elif emb["status"] == "error":
             warnings.append(f"Embedding model failed to load: {emb.get('error', 'unknown error')}")
 
+        token_budget = await self.get_token_budget_status()
+        if token_budget["enabled"] and token_budget["exceeded"]:
+            warnings.append(
+                f"每日 token 预算已耗尽（已用 {token_budget['used']}，预算 {token_budget['budget']}），请明日再试"
+            )
+
         return {
             "api_key_configured": api_key_configured,
             "local_pdf_count": local_pdf_count,
@@ -554,6 +561,7 @@ class DatabaseManager:
             "blockers": blockers,
             "warnings": warnings,
             "embedding_model": emb,
+            "token_budget": token_budget,
         }
 
     # ==================== DOI 存在性检查 ====================
@@ -711,6 +719,42 @@ class DatabaseManager:
             )
             await db.commit()
             return cursor.lastrowid
+
+    async def get_today_model_usage(self) -> dict:
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                """SELECT
+                       COUNT(*) as total_calls,
+                       COALESCE(SUM(input_tokens), 0) as input_tokens,
+                       COALESCE(SUM(output_tokens), 0) as output_tokens,
+                       COALESCE(SUM(total_tokens), 0) as total_tokens,
+                       COALESCE(SUM(tool_calls), 0) as tool_calls
+                   FROM model_usage_logs
+                   WHERE date(created_at, 'localtime') = date('now', 'localtime')"""
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else {
+                "total_calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "tool_calls": 0,
+            }
+
+    async def get_token_budget_status(self) -> dict:
+        if DAILY_TOKEN_BUDGET <= 0:
+            return {"enabled": False, "budget": 0, "used": 0, "remaining": 0, "exceeded": False}
+
+        today = await self.get_today_model_usage()
+        used = today["total_tokens"]
+        remaining = max(0, DAILY_TOKEN_BUDGET - used)
+        return {
+            "enabled": True,
+            "budget": DAILY_TOKEN_BUDGET,
+            "used": used,
+            "remaining": remaining,
+            "exceeded": used >= DAILY_TOKEN_BUDGET,
+        }
 
     async def doi_exists(self, doi: str) -> bool:
         """检查 DOI 是否已存在"""

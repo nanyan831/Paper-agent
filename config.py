@@ -114,3 +114,7 @@ CORS_ORIGINS = ["*"]
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+# ==================== Token 预算配置 ====================
+# 每日 token 预算上限，0 表示关闭限制
+DAILY_TOKEN_BUDGET = int(os.getenv('DAILY_TOKEN_BUDGET', '200000'))

@@ -370,6 +370,18 @@ async def chat_with_deepseek(req: ChatRequest):
     if not user_text:
         raise HTTPException(status_code=400, detail="message is required")
 
+    budget_status = await db_manager.get_token_budget_status()
+    if budget_status["enabled"] and budget_status["exceeded"]:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"每日 token 预算已用尽，无法继续使用。"
+                f"已用: {budget_status['used']} tokens，"
+                f"预算: {budget_status['budget']} tokens，"
+                f"剩余: {budget_status['remaining']} tokens。请明日再试。"
+            ),
+        )
+
     session = None
     if req.session_id:
         session = await db_manager.get_chat_session(req.session_id)
