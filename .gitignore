@@ -15,6 +15,7 @@ data/
 *.sqlite3
 chroma_db/
 logs/
+reports/
 
 # Environment variables
 .env
