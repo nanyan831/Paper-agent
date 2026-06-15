@@ -4,6 +4,7 @@ from .crawler import router as crawler_router
 from .agent import router as agent_router
 from .stats import router as stats_router
 from .translate import router as translate_router
+from .readiness import router as readiness_router
 
 __all__ = [
     "search_router",
@@ -11,5 +12,6 @@ __all__ = [
     "crawler_router",
     "agent_router",
     "stats_router",
-    "translate_router"
+    "translate_router",
+    "readiness_router",
 ]

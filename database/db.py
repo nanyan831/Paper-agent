@@ -8,7 +8,9 @@ from datetime import datetime
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from config import DB_PATH
+from config import DB_PATH, DEEPSEEK_API_KEY
+
+PLACEHOLDER_KEYS = {"", "your-api-key-here", "sk-xxx", "sk-placeholder", "insert_your_key_here"}
 
 
 class DatabaseManager:
@@ -479,6 +481,69 @@ class DatabaseManager:
                 (query, results_count, search_type),
             )
             await db.commit()
+
+    # ==================== Readiness ====================
+
+    async def get_readiness(self) -> dict:
+        key = (DEEPSEEK_API_KEY or "").strip()
+        api_key_configured = bool(key) and key.lower() not in PLACEHOLDER_KEYS
+
+        async with self._get_conn() as db:
+            cursor = await db.execute(
+                "SELECT COUNT(*) as cnt FROM papers WHERE source = 'local_pdf' OR (file_path IS NOT NULL AND file_path != '')"
+            )
+            local_pdf_count = (await cursor.fetchone())["cnt"]
+
+            cursor = await db.execute(
+                """SELECT COUNT(DISTINCT p.id) as cnt
+                   FROM papers p
+                   JOIN paper_chunks c ON c.paper_id = p.id
+                   WHERE (p.source = 'local_pdf' OR (p.file_path IS NOT NULL AND p.file_path != ''))
+                     AND c.id IS NOT NULL"""
+            )
+            searchable_pdf_count = (await cursor.fetchone())["cnt"]
+
+            cursor = await db.execute("SELECT COUNT(*) as cnt FROM paper_chunks")
+            chunk_count = (await cursor.fetchone())["cnt"]
+
+        if not api_key_configured:
+            status = "needs_api_key"
+        elif local_pdf_count == 0:
+            status = "needs_pdf"
+        elif searchable_pdf_count == 0:
+            status = "needs_chunks"
+        else:
+            status = "ready"
+
+        blockers = []
+        if not api_key_configured:
+            blockers.append({
+                "code": "NO_API_KEY",
+                "message": "DeepSeek API key is not configured",
+                "action": "Set DEEPSEEK_API_KEY in .env file",
+            })
+        if local_pdf_count == 0:
+            blockers.append({
+                "code": "NO_PDF",
+                "message": "No local PDF files uploaded",
+                "action": "Upload a PDF through the papers page",
+            })
+        if api_key_configured and local_pdf_count > 0 and searchable_pdf_count == 0:
+            blockers.append({
+                "code": "NO_CHUNKS",
+                "message": "PDFs have not been processed into searchable chunks",
+                "action": "Run PDF parsing on uploaded papers",
+            })
+
+        return {
+            "api_key_configured": api_key_configured,
+            "local_pdf_count": local_pdf_count,
+            "searchable_pdf_count": searchable_pdf_count,
+            "chunk_count": chunk_count,
+            "status": status,
+            "blockers": blockers,
+            "warnings": [],
+        }
 
     # ==================== DOI 存在性检查 ====================
 

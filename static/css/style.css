@@ -156,6 +156,95 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Readiness Banner */
+.readiness-banner {
+    margin-bottom: 24px;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: rgba(35, 39, 48, 0.56);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    transition: var(--transition);
+}
+
+.readiness-banner.hidden {
+    display: none;
+}
+
+.readiness-banner.ready {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.06);
+}
+
+.readiness-banner.needs_api_key {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.readiness-banner.needs_pdf {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.06);
+}
+
+.readiness-banner.needs_chunks {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.06);
+}
+
+.readiness-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.readiness-status i {
+    font-size: 15px;
+}
+
+.readiness-banner.ready .readiness-status { color: #10b981; }
+.readiness-banner.needs_api_key .readiness-status { color: #ef4444; }
+.readiness-banner.needs_pdf .readiness-status { color: #f59e0b; }
+.readiness-banner.needs_chunks .readiness-status { color: #f59e0b; }
+
+.readiness-metrics {
+    display: flex;
+    gap: 14px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.readiness-metric {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.readiness-metric .metric-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.readiness-metric .metric-dot.ok {
+    background: #10b981;
+}
+
+.readiness-metric .metric-dot.warn {
+    background: #f59e0b;
+}
+
+.readiness-metric .metric-dot.err {
+    background: #ef4444;
+}
+
 /* 搜索页 */
 .search-header {
     text-align: center;

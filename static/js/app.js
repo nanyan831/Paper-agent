@@ -9,6 +9,66 @@ document.addEventListener('DOMContentLoaded', () => {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 
+    // === Readiness Banner ===
+    const readinessState = { status: null, data: null };
+    const readinessBanner = document.getElementById('readinessBanner');
+
+    const readinessConfig = {
+        ready: { icon: 'fa-circle-check', text: '系统就绪，可以开始试用' },
+        needs_api_key: { icon: 'fa-key', text: '请在 .env 配置 DEEPSEEK_API_KEY 并重启服务' },
+        needs_pdf: { icon: 'fa-file-circle-plus', text: '请先在爬虫控制页导入 PDF' },
+        needs_chunks: { icon: 'fa-triangle-exclamation', text: '已导入 PDF 但不可检索，需 OCR 或换 PDF' }
+    };
+
+    async function loadReadiness() {
+        if (!readinessBanner) return;
+        try {
+            const res = await fetch('/api/readiness');
+            if (!res.ok) throw new Error('readiness fetch failed');
+            const data = await res.json();
+            readinessState.status = data.status;
+            readinessState.data = data;
+            renderReadinessBanner(data);
+        } catch (e) {
+            readinessBanner.classList.add('hidden');
+        }
+    }
+
+    function renderReadinessBanner(data) {
+        if (!readinessBanner) return;
+        const cfg = readinessConfig[data.status] || readinessConfig.ready;
+        const d = data;
+        const apiOk = d.api_key_configured;
+        const pdfCount = d.local_pdf_count || 0;
+        const searchableCount = d.searchable_pdf_count || 0;
+        const chunkCount = d.chunk_count || 0;
+
+        readinessBanner.className = `readiness-banner ${data.status}`;
+        readinessBanner.innerHTML = `
+            <span class="readiness-status">
+                <i class="fa-solid ${cfg.icon}"></i>
+                <span>${cfg.text}</span>
+            </span>
+            <span class="readiness-metrics">
+                <span class="readiness-metric"><span class="metric-dot ${apiOk ? 'ok' : 'err'}"></span> API Key ${apiOk ? '✓' : '✗'}</span>
+                <span class="readiness-metric"><span class="metric-dot ${pdfCount > 0 ? 'ok' : 'warn'}"></span> 本地 PDF ${pdfCount}</span>
+                <span class="readiness-metric"><span class="metric-dot ${searchableCount > 0 ? 'ok' : 'warn'}"></span> 可检索 ${searchableCount}</span>
+                <span class="readiness-metric"><span class="metric-dot ${chunkCount > 0 ? 'ok' : 'warn'}"></span> 全文 chunk ${chunkCount}</span>
+            </span>
+        `;
+    }
+
+    function shouldBlockChat() {
+        const s = readinessState.status;
+        if (s === 'needs_api_key') {
+            return confirm('AI 功能不可用：DEEPSEEK_API_KEY 未配置，AI/翻译将无法使用。是否仍继续？');
+        }
+        if (s === 'needs_pdf' || s === 'needs_chunks') {
+            return confirm('当前没有可引用全文，建议先导入可检索 PDF。是否仍继续？');
+        }
+        return true;
+    }
+
     function showView(targetView, activateNav = true) {
         if (activateNav) {
             navItems.forEach(nav => {
@@ -1076,6 +1136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('pdfAuthors').value = '';
             document.getElementById('pdfKeywords').value = '';
             loadRecentPdfs();
+            loadReadiness();
         } catch (error) {
             alert('PDF 导入失败: ' + error.message);
         } finally {
@@ -1510,6 +1571,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendChatMessage() {
         const text = chatInput.value.trim();
         if (!text) return;
+
+        if (!shouldBlockChat()) return;
 
         // 构建本地消息追加
         currentChatMessages.push({ role: 'user', content: text });
