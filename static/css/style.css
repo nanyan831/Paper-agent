@@ -1,4 +1,4 @@
-/* 基础变量定义 - 深色美学主题 */
+﻿/* 基础变量定义 - 深色美学主题 */
 :root {
     --bg-main: #0f1115;
     --bg-secondary: #1a1d24;
@@ -1191,6 +1191,41 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.reader-ai-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-color);
+}
+
+.reader-ai-actions .reader-btn {
+    width: auto;
+    padding: 0 10px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.reader-ai-actions .reader-btn:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.reader-ai-actions .reader-btn span {
+    display: inline;
+}
+
+@media (max-width: 768px) {
+    .reader-ai-actions {
+        display: none;
+    }
 }
 
 .reader-mode-toggle {
