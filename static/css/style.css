@@ -2317,3 +2317,46 @@ body {
         right: 14px;
     }
 }
+
+/* P4: Text Selection Toolbar */
+.text-selection-toolbar {
+    position: absolute;
+    z-index: 1000;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transform: translateX(-50%);
+    pointer-events: auto;
+}
+
+.text-selection-toolbar.hidden {
+    display: none;
+}
+
+.selection-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.selection-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.pdf-canvas-wrap {
+    position: relative;
+    user-select: text;
+}
+
+.pdf-canvas-wrap::selection {
+    background: rgba(59, 130, 246, 0.3);
+}
