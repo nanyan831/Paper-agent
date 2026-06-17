@@ -16,6 +16,8 @@ DISPLAY_MESSAGE_LIMIT = 200
 SUMMARY_MESSAGE_THRESHOLD = 16
 MIN_CONFIDENT_SOURCE_COUNT = 2
 LOW_SCORE_THRESHOLD = 0.005
+SOFT_TOKEN_LIMIT = 8000
+ESTIMATED_CHARS_PER_TOKEN = 3.5
 
 SYSTEM_PROMPT = (
     "你是一个智能学术助手。回答论文内容、方法、结论、证据时，必须优先调用 search_chunks "
@@ -179,6 +181,19 @@ def _normalize_source(hit: dict) -> dict:
 
 
 def _evidence_confidence(search_score: Any, search_type: Optional[str], has_page: bool = False) -> str:
+def _estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return int(len(text) / ESTIMATED_CHARS_PER_TOKEN)
+
+
+def _estimate_context_tokens(context: list[dict]) -> int:
+    total = 0
+    for msg in context:
+        total += _estimate_tokens(msg.get("content") or "")
+        for tool_call in msg.get("tool_calls") or []:
+            total += _estimate_tokens((tool_call.get("function") or {}).get("arguments") or "")
+    return total
     if search_score is None:
         return "unknown"
     try:
@@ -401,6 +416,16 @@ async def chat_with_deepseek(req: ChatRequest):
     )
     compact_context = _build_context_messages(session or {}, recent_messages)
     context_len = len(compact_context)
+
+    estimated_tokens = _estimate_context_tokens(compact_context)
+    if estimated_tokens > SOFT_TOKEN_LIMIT:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"上下文过长（预估 {estimated_tokens} tokens），请新开一个对话或缩短问题。"
+                f"当前软上限：{SOFT_TOKEN_LIMIT} tokens。"
+            ),
+        )
 
     result = await chat_with_agent_result(compact_context)
     await _persist_agent_result(session_id, result["messages"], context_len)

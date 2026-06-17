@@ -20,7 +20,7 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-SNIPPET_CHARS = 900
+SNIPPET_CHARS = 450
 
 
 def _snippet(text: str, max_chars: int = SNIPPET_CHARS) -> str:
@@ -87,7 +87,7 @@ def init_tools_dependencies(
 
 async def tool_search_papers(params: SearchPapersParams) -> ToolResponse:
     try:
-        top_k = min(params.top_k, 8)
+        top_k = min(params.top_k, 4)
         results = await _retriever.search(
             query=params.query,
             top_k=top_k,
@@ -102,7 +102,7 @@ async def tool_search_papers(params: SearchPapersParams) -> ToolResponse:
 
 async def tool_search_chunks(params: SearchChunksParams) -> ToolResponse:
     try:
-        top_k = min(params.top_k, 8)
+        top_k = min(params.top_k, 4)
         results = await _retriever.search_chunks(
             query=params.query,
             top_k=top_k,
