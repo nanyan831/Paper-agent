@@ -180,7 +180,6 @@ def _normalize_source(hit: dict) -> dict:
     }
 
 
-def _evidence_confidence(search_score: Any, search_type: Optional[str], has_page: bool = False) -> str:
 def _estimate_tokens(text: str) -> int:
     if not text:
         return 0
@@ -194,6 +193,9 @@ def _estimate_context_tokens(context: list[dict]) -> int:
         for tool_call in msg.get("tool_calls") or []:
             total += _estimate_tokens((tool_call.get("function") or {}).get("arguments") or "")
     return total
+
+
+def _evidence_confidence(search_score: Any, search_type: Optional[str], has_page: bool = False) -> str:
     if search_score is None:
         return "unknown"
     try:
